@@ -6,9 +6,16 @@ import numpy as np
 import math
 
 # Global Variables
+min_blob_size = 20   # Distance for particle to reflect within blob
+color_threshold_r = 230  # Min
+color_threshold_g = 50   # Max
+color_threshold_b = 50   # Max
 
 # Read Image
 img = mpimg.imread('grail_gravity_map_moon.jpg') 
+
+#		   y  x
+#print img[0][3]
 
 # Figure
 #fig = plt.figure() #figsize=(7,7))
@@ -37,14 +44,14 @@ ax.imshow(img)   # show gravity map on plot
 
 # Create Swarm
 swarm_size = 50
-swarm = np.zeros(swarm_size, dtype=[('position',  float, 2),   # Position (x,y)
-                                    ('velocity',  float, 2),   # Velocity (dx,dy)
-                                    ('color',     float, 4)])  # Color (r,g,b,a)
+swarm = np.zeros(swarm_size, dtype=[('position',  int, 2),   # Position (x,y)
+                                    ('velocity',  int, 2),   # Velocity (dx,dy)
+                                    ('color',     int, 3)])  # Color (r,g,b,a)
 
 def get_rand_velocity(n, d):
 	return np.random.choice([-5,-4,-3,-2,-1,1,2,4,5], (n, d))
 
-scale = 8
+scale = 5
 particle_size = 25 * scale  # Set particle size
 radius = particle_size * 0.08
 arrow_width = particle_size * 0.05
@@ -54,7 +61,8 @@ edge_color = (0, 0, 0, 1)   # Set global outline color
 swarm['position'][:, 0] = np.random.randint(0, img_x, swarm_size)   # Set random Y position in px
 swarm['position'][:, 1] = np.random.randint(0, img_y, swarm_size)   # Set random X position in px
 swarm['velocity'] = get_rand_velocity(swarm_size, 2)   # Set velocity components in px
-swarm['color'] = (1, 0.0784, 0.576, 1)   # Set initial RGBA color to pink, can change on location?
+for particle in swarm:
+	particle['color'] = img[particle['position'][1]][particle['position'][0]] #(1, 0.0784, 0.576)   # Set initial RGBA color to pink, can change on location?
 
 # Create initial scatter plot
 scatter_plot = ax.scatter(swarm['position'][:, 0], swarm['position'][:, 1],
@@ -133,8 +141,9 @@ def update(frame_number):
 
     # Update the scatter collection
 	scatter_plot.set_offsets(swarm['position'])
+	#TODO: set color
 
 
 #plt.grid(True)   # Show grid on axes
-animation = FuncAnimation(fig, update, interval=250)
+#animation = FuncAnimation(fig, update, interval=100)
 plt.show()   # Show plot
