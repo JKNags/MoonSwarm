@@ -14,44 +14,31 @@ color_threshold_b = 50   # Max
 # Read Image
 img = mpimg.imread('grail_gravity_map_moon.jpg') 
 
-#		   y  x
-#print img[0][3]
-
 # Figure
-#fig = plt.figure() #figsize=(7,7))
 fig, ax = plt.subplots()
-
-#print(img)
-#print("Data type of img > ", type(img))
-#print("Shape of img > ", img.shape)
-#print("Dimention of img > ",img.ndim)
 
 img_x = img.shape[1]   # get x size
 img_y = img.shape[0]   # get y size
 plt.xlim(0,img_x)   # set x limits of plot
 plt.ylim(0,img_y)   # set y limits of plot
 
-#ax = fig.add_axes([0, 0, 1, 1], frameon=False)
-#ax.set_xlim(0,1), ax.set_xticks([])
-#ax.set_ylim(0,1), ax.set_yticks([])
-
 print ("X=", img.shape[1])
 print ("Y=", img.shape[0])
 
 # Output Images 
 ax.imshow(img)   # show gravity map on plot
-#ax.figure.figimage(img,0,0)
 
 # Create Swarm
-swarm_size = 50
-swarm = np.zeros(swarm_size, dtype=[('position',  int, 2),   # Position (x,y)
+swarm_size = 10
+swarm = np.ones(swarm_size, dtype=[('position',  int, 2),   # Position (x,y)
                                     ('velocity',  int, 2),   # Velocity (dx,dy)
-                                    ('color',     int, 3)])  # Color (r,g,b,a)
+                                    ('color',     float, 3)])  # Color (r,g,b)
 
+# return random int, not 0
 def get_rand_velocity(n, d):
 	return np.random.choice([-5,-4,-3,-2,-1,1,2,4,5], (n, d))
 
-scale = 5
+scale = 10
 particle_size = 25 * scale  # Set particle size
 radius = particle_size * 0.08
 arrow_width = particle_size * 0.05
@@ -61,8 +48,8 @@ edge_color = (0, 0, 0, 1)   # Set global outline color
 swarm['position'][:, 0] = np.random.randint(0, img_x, swarm_size)   # Set random Y position in px
 swarm['position'][:, 1] = np.random.randint(0, img_y, swarm_size)   # Set random X position in px
 swarm['velocity'] = get_rand_velocity(swarm_size, 2)   # Set velocity components in px
-for particle in swarm:
-	particle['color'] = img[particle['position'][1]][particle['position'][0]] #(1, 0.0784, 0.576)   # Set initial RGBA color to pink, can change on location?
+#particle['color'] = (1, 0.0784, 0.576)   # pink color
+swarm['color'] = [tuple(img[particle['position'][1]][particle['position'][0]] / 255.0) for particle in swarm]
 
 # Create initial scatter plot
 scatter_plot = ax.scatter(swarm['position'][:, 0], swarm['position'][:, 1],
@@ -80,30 +67,7 @@ def set_markers():
 		paths.append(path)
 	scatter_plot.set_paths(paths)
 
-# Create arrows for scatter plot
-#ax = plt.axes()
-"""
-arrows = [swarm_size]
-
-def set_arrow(idx):
-	particle = swarm[idx]
-	x = particle['position'][0]   # position x coordinate
-	y = particle['position'][1]   # position y coordinate
-	vx = particle['velocity'][0]   # velocity x component
-	vy = particle['velocity'][1]   # velocity y component
-	rad = math.atan2(vy, vx)   # rotation in rad of velocity
-	arrow_x = math.cos(rad) * radius   # base of velocity arrow x
-	arrow_y = math.sin(rad) * radius   # base of belocity arrow y
-	arrow_dx = arrow_x * abs(vx) * 0.3   # tip of velocity arrow x
-	arrow_dy = arrow_y * abs(vy) * 0.3   # tip of velocity arrow y
-	arrows.append(ax.arrow(x + arrow_x, y + arrow_y, 
-			arrow_dx, arrow_dy,
-			fc=particle['color'], ec=edge_color, width=arrow_width,
-			head_width=arrow_head_width, head_length=arrow_head_length))
-
-for idx,particle in enumerate(swarm):
-	set_arrow(idx)
-"""
+set_markers()
 
 def update(frame_number):
 	for idx,particle in enumerate(swarm):
@@ -115,8 +79,8 @@ def update(frame_number):
 		if (x + vx < 0):   # check min bounds x
 			x = 0
 			vx *= -1
-		elif (x + vx > img_x):   # check max bounds x
-			x = img_x
+		elif (x + vx > (img_x - 1)):   # check max bounds x, sub 1 bc img_x is size not index
+			x = (img_x - 1)
 			vx *= -1
 		else:
 			x += vx   # normal movement
@@ -124,8 +88,8 @@ def update(frame_number):
 		if (y + vy < 0):   # check min bounds y
 			y = 0
 			vy *= -1
-		elif (y + vy > img_y):   # check max bounds y
-			y = img_y
+		elif (y + vy > (img_y - 1)):   # check max bounds y
+			y = (img_y - 1)
 			vy *= -1
 		else:
 			y += vy   # normal movement
@@ -134,16 +98,18 @@ def update(frame_number):
 		particle['position'][0] = x
 		particle['position'][1] = y
 		particle['velocity'][0] = vx if (np.random.rand() > 0.05) else get_rand_velocity(1, 1) 
-		particle['velocity'][1] = vy if (np.random.rand() > 0.05) else get_rand_velocity(1, 1) 
+		particle['velocity'][1] = vy if (np.random.rand() > 0.05) else get_rand_velocity(1, 1)
+		particle['color'] = tuple(img[y][x] / 255.0)
 		markers[idx] = (3, 0, math.degrees(math.atan2(vy, vx))-90)
 	
 	set_markers()
 
     # Update the scatter collection
 	scatter_plot.set_offsets(swarm['position'])
+	scatter_plot.set_facecolor(swarm['color'])
 	#TODO: set color
 
 
 #plt.grid(True)   # Show grid on axes
-#animation = FuncAnimation(fig, update, interval=100)
+animation = FuncAnimation(fig, update, interval=100)
 plt.show()   # Show plot
