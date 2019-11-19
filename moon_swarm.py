@@ -7,9 +7,12 @@ import math
 
 # Global Variables
 min_blob_size = 20   # Distance for particle to reflect within blob
-color_threshold_r = 230  # Min
-color_threshold_g = 50   # Max
-color_threshold_b = 50   # Max
+color_threshold_r = 225  # Min
+color_threshold_g = 80   # Max
+color_threshold_b = 80   # Max
+
+def is_red(color):
+	return color[0] > color_threshold_r and color[1] < color_threshold_g and color[2] < color_threshold_b
 
 # Read Image
 img = mpimg.imread('grail_gravity_map_moon.jpg') 
@@ -22,17 +25,17 @@ img_y = img.shape[0]   # get y size
 plt.xlim(0,img_x)   # set x limits of plot
 plt.ylim(0,img_y)   # set y limits of plot
 
-print ("X=", img.shape[1])
-print ("Y=", img.shape[0])
+#print ("X=", img.shape[1])
+#print ("Y=", img.shape[0])
 
 # Output Images 
 ax.imshow(img)   # show gravity map on plot
 
 # Create Swarm
-swarm_size = 10
+swarm_size = 1
 swarm = np.ones(swarm_size, dtype=[('position',  int, 2),   # Position (x,y)
-                                    ('velocity',  int, 2),   # Velocity (dx,dy)
-                                    ('color',     float, 3)])  # Color (r,g,b)
+                                   ('velocity',  int, 2),   # Velocity (dx,dy)
+                                   ('color',     float, 3)])  # Color (r,g,b)
 
 # return random int, not 0
 def get_rand_velocity(n, d):
@@ -40,23 +43,21 @@ def get_rand_velocity(n, d):
 
 scale = 10
 particle_size = 25 * scale  # Set particle size
-radius = particle_size * 0.08
-arrow_width = particle_size * 0.05
-arrow_head_width = particle_size * 0.12
-arrow_head_length = particle_size * 0.12
+#radius = particle_size * 0.08
 edge_color = (0, 0, 0, 1)   # Set global outline color
 swarm['position'][:, 0] = np.random.randint(0, img_x, swarm_size)   # Set random Y position in px
 swarm['position'][:, 1] = np.random.randint(0, img_y, swarm_size)   # Set random X position in px
 swarm['velocity'] = get_rand_velocity(swarm_size, 2)   # Set velocity components in px
 #particle['color'] = (1, 0.0784, 0.576)   # pink color
-swarm['color'] = [tuple(img[particle['position'][1]][particle['position'][0]] / 255.0) for particle in swarm]
+swarm['color'] = [tuple(img[particle['position'][1]][particle['position'][0]]) for particle in swarm]
 
 # Create initial scatter plot
 scatter_plot = ax.scatter(swarm['position'][:, 0], swarm['position'][:, 1],
-            c=swarm['color'], s=particle_size, lw=0.5, 
+            c=(swarm['color'] / 255.0), s=particle_size, lw=0.5, 
             edgecolors=edge_color, facecolors='none')
 
 # Update plot for markers to show velocity
+#   ( num_sides=3, style=0=regular_polygon, angle=atan2(y/x) )
 markers = [(3, 0, math.degrees(math.atan2(particle['velocity'][1], particle['velocity'][0]))-90) for particle in swarm]
 
 def set_markers():
@@ -67,7 +68,8 @@ def set_markers():
 		paths.append(path)
 	scatter_plot.set_paths(paths)
 
-set_markers()
+set_markers() # set plot markers as triangles with rotation wrt velocity
+
 
 def update(frame_number):
 	for idx,particle in enumerate(swarm):
@@ -94,22 +96,108 @@ def update(frame_number):
 		else:
 			y += vy   # normal movement
 
+		# check color
+		position_color = tuple(img[y][x])
+		#print "P%d color = %s" % (idx, position_color)
+		surrounding_colors = [None,None,None,None,None,None,None,None]
+		try:
+			# check bounds for using [y|x][minus|plus]
+			xm = x != 0   # can use x-1
+			ym = y != 0   # can use y-1
+			xp = x != img_x-1   # can use x+1
+			yp = y != img_y-1   # can use y+1
+
+			"""
+			if (yp and xm):
+				surrounding_colors.append(tuple(img[y+1][x-1]))
+			if (yp):
+				surrounding_colors.append(tuple(img[y+1][x]))
+			if (yp and xp):
+				surrounding_colors.append(tuple(img[y+1][x+1]))
+			if (xm):
+				surrounding_colors.append(tuple(img[y][x-1]))
+			if (xp):
+				surrounding_colors.append(tuple(img[y][x+1]))
+			if (ym and xm):
+				surrounding_colors.append(tuple(img[y-1][x-1]))
+			if (ym):
+				surrounding_colors.append(tuple(img[y-1][x]))
+			if (ym and xp):
+				surrounding_colors.append(tuple(img[y-1][x+1]))
+			"""
+			if (yp):
+				surrounding_colors[1] = tuple(img[y+1][x])
+				if (xm):
+					surrounding_colors[0] = tuple(img[y+1][x-1])
+				if (xp):
+					surrounding_colors[2] = tuple(img[y+1][x+1])
+			if (xm):
+				surrounding_colors[3] = tuple(img[y][x-1])
+			if (xp):
+				surrounding_colors[4] = tuple(img[y][x+1])
+			if (ym):
+				surrounding_colors[6] = tuple(img[y-1][x])
+				if (xm):
+					surrounding_colors[5] = tuple(img[y-1][x-1])
+				if (xp):
+					surrounding_colors[7] = tuple(img[y-1][x+1])
+		except:
+			print "error"
+
+		most_red_path = -1
+		if (is_red(position_color)):
+			print position_color,"IS RED!"
+
+			#for idx,color in enumerate(surrounding_colors):
+			#	continue
+		else:
+			print position_color
+
+
+
 		# set particle data
 		particle['position'][0] = x
 		particle['position'][1] = y
-		particle['velocity'][0] = vx if (np.random.rand() > 0.05) else get_rand_velocity(1, 1) 
-		particle['velocity'][1] = vy if (np.random.rand() > 0.05) else get_rand_velocity(1, 1)
-		particle['color'] = tuple(img[y][x] / 255.0)
+		particle['velocity'][0] = vx if (np.random.rand() > 0.01) else get_rand_velocity(1, 1) 
+		particle['velocity'][1] = vy if (np.random.rand() > 0.01) else get_rand_velocity(1, 1)
+		particle['color'] = position_color
 		markers[idx] = (3, 0, math.degrees(math.atan2(vy, vx))-90)
 	
-	set_markers()
+	set_markers()   # update rotation of plot markers
 
     # Update the scatter collection
 	scatter_plot.set_offsets(swarm['position'])
-	scatter_plot.set_facecolor(swarm['color'])
-	#TODO: set color
+	scatter_plot.set_facecolor(swarm['color'] / 255.0)
 
+	#if (frame_number == 20):
+	#	animation.event_source.stop()
 
-#plt.grid(True)   # Show grid on axes
-animation = FuncAnimation(fig, update, interval=100)
+# Mouse click event
+#   Print image data at click location
+def onclick(event):
+	try:
+		print "click at (%.2f, %.2f) : %s" % (event.xdata, event.ydata, tuple(img[int(event.ydata)][int(event.xdata)]))
+	except Exception as e:
+		print e
+		pass
+
+# Keyboard click event
+#   Start/Stop animation on any key press
+def onpress(event):
+	global run_anim
+	if (run_anim):
+		run_anim = False
+		animation.event_source.stop()
+	else:
+		run_anim = True
+		animation.event_source.start()
+
+run_anim = True
+click_cid = fig.canvas.mpl_connect('button_press_event', onclick)
+btn_cid = fig.canvas.mpl_connect('key_press_event', lambda event: onpress(event))
+
+plt.grid(True)   # Show grid on axes
+animation = FuncAnimation(fig, update, interval=200)
 plt.show()   # Show plot
+
+
