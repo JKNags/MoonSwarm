@@ -7,15 +7,17 @@ import math
 
 # Global Variables
 min_blob_size = 20   # Distance for particle to reflect within blob
+search_color = (255, 0, 0)
 color_threshold_r = 225  # Min
 color_threshold_g = 80   # Max
 color_threshold_b = 80   # Max
 
-def is_red(color):
+def is_in_color(color):
 	return color[0] > color_threshold_r and color[1] < color_threshold_g and color[2] < color_threshold_b
 
 # Read Image
 img = mpimg.imread('grail_gravity_map_moon.jpg') 
+#img = mpimg.imread('test1.jpg')[:,:,:3]
 
 # Figure
 fig, ax = plt.subplots()
@@ -33,9 +35,10 @@ ax.imshow(img)   # show gravity map on plot
 
 # Create Swarm
 swarm_size = 1
-swarm = np.ones(swarm_size, dtype=[('position',  int, 2),   # Position (x,y)
-                                   ('velocity',  int, 2),   # Velocity (dx,dy)
-                                   ('color',     float, 3)])  # Color (r,g,b)
+swarm = np.zeros(swarm_size, dtype=[('position',  int, 2),   # Position (x,y)
+                                   ('velocity',  int, 2),    # Velocity (dx,dy)
+                                   ('color',     float, 3),  # Color (r,g,b)
+                                   ('in_color_count', int, 1)])  
 
 # return random int, not 0
 def get_rand_velocity(n, d):
@@ -50,6 +53,13 @@ swarm['position'][:, 1] = np.random.randint(0, img_y, swarm_size)   # Set random
 swarm['velocity'] = get_rand_velocity(swarm_size, 2)   # Set velocity components in px
 #particle['color'] = (1, 0.0784, 0.576)   # pink color
 swarm['color'] = [tuple(img[particle['position'][1]][particle['position'][0]]) for particle in swarm]
+
+
+
+swarm['position'][:, 0] = 147
+swarm['position'][:, 1] = 344
+
+
 
 # Create initial scatter plot
 scatter_plot = ax.scatter(swarm['position'][:, 0], swarm['position'][:, 1],
@@ -72,12 +82,13 @@ set_markers() # set plot markers as triangles with rotation wrt velocity
 
 
 def update(frame_number):
-	for idx,particle in enumerate(swarm):
+	for p_idx,particle in enumerate(swarm):
 		x = particle['position'][0]   # position x coordinate
 		y = particle['position'][1]   # position y coordinate
 		vx = particle['velocity'][0]   # velocity x component
 		vy = particle['velocity'][1]   # velocity y component
 		
+		# Check for position bounds and adjust velocity
 		if (x + vx < 0):   # check min bounds x
 			x = 0
 			vx *= -1
@@ -96,7 +107,7 @@ def update(frame_number):
 		else:
 			y += vy   # normal movement
 
-		# check color
+		# Check position and surrounding color data
 		position_color = tuple(img[y][x])
 		#print "P%d color = %s" % (idx, position_color)
 		surrounding_colors = [None,None,None,None,None,None,None,None]
@@ -107,24 +118,10 @@ def update(frame_number):
 			xp = x != img_x-1   # can use x+1
 			yp = y != img_y-1   # can use y+1
 
-			"""
-			if (yp and xm):
-				surrounding_colors.append(tuple(img[y+1][x-1]))
-			if (yp):
-				surrounding_colors.append(tuple(img[y+1][x]))
-			if (yp and xp):
-				surrounding_colors.append(tuple(img[y+1][x+1]))
-			if (xm):
-				surrounding_colors.append(tuple(img[y][x-1]))
-			if (xp):
-				surrounding_colors.append(tuple(img[y][x+1]))
-			if (ym and xm):
-				surrounding_colors.append(tuple(img[y-1][x-1]))
-			if (ym):
-				surrounding_colors.append(tuple(img[y-1][x]))
-			if (ym and xp):
-				surrounding_colors.append(tuple(img[y-1][x+1]))
-			"""
+			# 0 1 2
+			# 3 X 4
+			# 5 6 7
+
 			if (yp):
 				surrounding_colors[1] = tuple(img[y+1][x])
 				if (xm):
@@ -144,24 +141,61 @@ def update(frame_number):
 		except:
 			print "error"
 
-		most_red_path = -1
-		if (is_red(position_color)):
+		# Check if position color in color threshold
+		if (is_in_color(position_color)):
 			print position_color,"IS RED!"
 
-			#for idx,color in enumerate(surrounding_colors):
-			#	continue
+			# Find direction of best red
+			best_node_idx = -1
+			best_dist = 1000
+			for c_idx,surrounding_color in enumerate(surrounding_colors):
+				dist = abs(search_color[0] - surrounding_color[0]) + \
+					abs(search_color[1] - surrounding_color[1]) + abs(search_color[2] - surrounding_color[2])
+				if (dist < best_dist):
+					best_dist = dist
+					best_node_idx = c_idx
+
+			print "\tMoving to idx:",best_node_idx
+
+			if (particle['in_color_count'] == 0):
+				# Change velocity wrt current velocity
+				if (best_node_idx <= 2):
+					vy = 1
+				elif (best_node_idx <= 4):
+					vy = 0
+				else:
+					vy = -1
+
+				if (best_node_idx in (2,4,7)):
+					vx = 1
+				elif (best_node_idx in (1,6)):
+					vx = 0
+				else:
+					vx = -1
+
+			particle['in_color_count'] += 1
 		else:
 			print position_color
 
+			if (particle['in_color_count'] > 0):
+				# particle was just in color, reverse
+				vx *= -1
+				vy *= -1
+			else:
+				particle['in_color_count'] = 0
+				# Randomly change velocity
+				vx = vx if (np.random.rand() > 0.02) else get_rand_velocity(1, 1) 
+				vy = vy if (np.random.rand() > 0.02) else get_rand_velocity(1, 1)
+			
 
 
 		# set particle data
 		particle['position'][0] = x
 		particle['position'][1] = y
-		particle['velocity'][0] = vx if (np.random.rand() > 0.01) else get_rand_velocity(1, 1) 
-		particle['velocity'][1] = vy if (np.random.rand() > 0.01) else get_rand_velocity(1, 1)
+		particle['velocity'][0] = vx
+		particle['velocity'][1] = vy
 		particle['color'] = position_color
-		markers[idx] = (3, 0, math.degrees(math.atan2(vy, vx))-90)
+		markers[p_idx] = (3, 0, math.degrees(math.atan2(vy, vx))-90)
 	
 	set_markers()   # update rotation of plot markers
 
@@ -173,31 +207,46 @@ def update(frame_number):
 	#	animation.event_source.stop()
 
 # Mouse click event
-#   Print image data at click location
 def onclick(event):
 	try:
+		# Print image data at click location
 		print "click at (%.2f, %.2f) : %s" % (event.xdata, event.ydata, tuple(img[int(event.ydata)][int(event.xdata)]))
 	except Exception as e:
 		print e
 		pass
 
 # Keyboard click event
-#   Start/Stop animation on any key press
 def onpress(event):
 	global run_anim
-	if (run_anim):
-		run_anim = False
-		animation.event_source.stop()
-	else:
-		run_anim = True
-		animation.event_source.start()
+	global interval, min_interval, max_interval
+
+	# Start/Stop animation on any key press
+	if (event.key == "x"):
+		if (run_anim):
+			run_anim = False
+			animation.event_source.stop()
+		else:
+			run_anim = True
+			animation.event_source.start()
+
+	# Change animation interval
+	# NOT WORKING
+	if (event.key == "-" and interval > min_interval):
+		interval -= 25
+		animation.event_source.interval = interval
+	if (event.key == "=" and interval < max_interval):
+		interval += 25
+		animation.event_source.interval = interval
 
 run_anim = True
+interval = 200
+min_interval = 25
+max_interval = 500
 click_cid = fig.canvas.mpl_connect('button_press_event', onclick)
-btn_cid = fig.canvas.mpl_connect('key_press_event', lambda event: onpress(event))
+btn_cid = fig.canvas.mpl_connect('key_press_event', onpress)
 
 plt.grid(True)   # Show grid on axes
-animation = FuncAnimation(fig, update, interval=200)
+animation = FuncAnimation(fig, update, interval=interval)
 plt.show()   # Show plot
 
 
