@@ -44,30 +44,37 @@ def get_rand_velocity(n, d):
 	return np.random.choice(a, (n, d))
 
 # Create Swarm
+num_groups = 1
 swarm_size = 1
 swarm = np.zeros(swarm_size, dtype=[('position',       int, 2),    # Position (x,y)
                                    ('velocity',        int, 2),    # Velocity (dx,dy)
                                    ('color',           float, 3),  # Color (r,g,b)
-                                   ('group',		   int, 1),    # Group
+                                   ('group_num',	   int, 1),    # Group
                                    ('state',   		   int, 1),    # Is currently tracing edge
                                    ('blob_num',        int, 1),    # Number of blob it is tracking. 0=none
 								   ('in_color_count',  int, 1)])   # Num iter in color
 
 scale = 10
 particle_size = 25 * scale  # Set particle size
-#radius = particle_size * 0.08
 edge_color = (0, 0, 0, 1)   # Set global outline color
 swarm['position'][:, 0] = np.random.randint(0, img_x, swarm_size)   # Set random Y position in px
 swarm['position'][:, 1] = np.random.randint(0, img_y, swarm_size)   # Set random X position in px
 swarm['velocity'] = get_rand_velocity(swarm_size, 2)   # Set velocity components in px
 #particle['color'] = (1, 0.0784, 0.576)   # pink color
 swarm['color'] = [tuple(img[particle['position'][1]][particle['position'][0]]) for particle in swarm]
+swarm['blob_num'] = -1
 
-# Found blob data
-next_blob_num = 1   # for use when a new blob is discovered
-blobs = np.empty(0, dtype=[('max_radius_found', int, 1),
-						   ('group',			int, 1),
-						   ('approx_position',  int, 2)])
+step = int(float(swarm_size)/num_groups)
+for group_num in range(0, num_groups):
+	swarm[group_num * step : group_num * step + step]['group_num'] = group_num
+
+#print swarm
+
+# Blob data
+next_blob_num = 0   # for use when a new blob is discovered
+blobs = np.empty(0, dtype=[('max_sqr_found',    int, 1),
+						   ('num_reflections',  int, 1),
+						   ('position',			int, 2)])
 
 """
 THIS IS FOR TESTING, REMOVE LATER
@@ -108,37 +115,34 @@ def adjust_for_img_bounds(_x, _y, _vx, _vy, particle):
 	if (_x + _vx < 0):   # check min bounds x
 		_x = 0
 		_vx *= -1
-		particle['in_color_count_m'] = 0   # reset counter
-		particle['in_color_count_cnt'] = 0   # reset counter
+		particle['in_color_count'] = 0   # reset counter
 	elif (_x + _vx > (img_x - 1)):   # check max bounds x, sub 1 bc img_x is size not index
 		_x = (img_x - 1)
 		_vx *= -1
-		particle['in_color_count_m'] = 0   # reset counter
-		particle['in_color_count_cnt'] = 0   # reset counter
+		particle['in_color_count'] = 0   # reset counter
 	else:
 		_x += _vx   # normal movement
 
 	if (_y + _vy < 0):   # check min bounds y
 		_y = 0
 		_vy *= -1
-		particle['in_color_count_m'] = 0   # reset counter
-		particle['in_color_count_cnt'] = 0   # reset counter
+		particle['in_color_count'] = 0   # reset counter
 	elif (_y + _vy > (img_y - 1)):   # check max bounds y
 		_y = (img_y - 1)
 		_vy *= -1
-		particle['in_color_count_m'] = 0   # reset counter
-		particle['in_color_count_cnt'] = 0   # reset counter
+		particle['in_color_count'] = 0   # reset counter
 	else:
 		_y += _vy   # normal movement
 	return _x, _y, _vx, _vy
 
 # Calculate estimated area of a circle given squared radius
-def calculate_A_circle_sqd(r2):
+def calculate_A_circle_sqr(r2):
 	return 3.1415927 * r2
 
 # Called every animation frame
 def update(frame_number):
 	#print "Frame %d" % frame_number
+	global next_blob_num
 
 	for p_idx,particle in enumerate(swarm):
 		x = particle['position'][0]   # position x coordinate
@@ -160,7 +164,15 @@ def update(frame_number):
 				d = (abs(vx) + abs(vy)) * particle['in_color_count']   # distance travelled
 				if (d >= min_blob_size):
 					particle['state'] = 1
-					particle['blob_num'] = 1
+
+					if (particle['blob_num'] < 0):
+						# First blob found for group
+						print 'assigning new blob num -', next_blob_num
+						blobs.resize(next_blob_num + 1)   # add new blob to list
+						swarm[particle['group_num'] * step : particle['group_num'] * step + step]['blob_num'] = next_blob_num
+						blobs[next_blob_num]['position'] = (x, y)   # set approximate position of blob
+						next_blob_num += 1
+
 					print "\tEntered in blob state"
 				else:
 					particle['in_color_count'] += 1    # increment counter
@@ -183,7 +195,6 @@ def update(frame_number):
 			print "X(%d, %d), V(%d, %d), %s : State == 1" % (x,y,vx,vy,"RED" if is_in_color(position_color) else "",)
 
 			# Check if next position will be out of bounds or outside blob
-			print "is next in color ? : ", is_in_color(tuple(img[y + vy][x + vx]))
 			if (is_inside_img_bounds(x + vx, y + vy) and not is_in_color(tuple(img[y + vy][x + vx]))):
 				# need to reduce velocity to just hit in color edge next update
 
@@ -194,9 +205,12 @@ def update(frame_number):
 				next_vy = vy * -1   # store reversed velocity
 
 				# Slightly change velocity
-				pos_range = [v for v in range(0, velocity_max+1)]
-				neg_range = [v for v in range(velocity_min, 1)]
-				all_range = np.union1d(pos_range,neg_range)
+				#pos_range = [v for v in range(0, velocity_max+1)]
+				#neg_range = [v for v in range(velocity_min, 1)]
+				#all_range = np.union1d(pos_range,neg_range)
+				all_range = [v for v in range(velocity_min, velocity_max+1)]
+				pos_range = all_range[len(all_range)/2:]
+				neg_range = all_range[0:len(all_range)/2+1]
 
 				while (True):   # loop to ensure both components != 0
 					if (next_vx > 0):
@@ -234,11 +248,19 @@ def update(frame_number):
 				vy = next_vy
 
 				c2 = a**2 + b**2   # calculate Euclidean c^2,  where c^2 / 4 = r^2 
+				r2 = c2 / 4
+				approx_blob_area = calculate_A_circle_sqr(r2)
 
 				print "\tflipped V, setting x=%d,y=%d, COUNT=%d, A=%.2f" % \
-						(x,y, particle['in_color_count'], calculate_A_circle_sqd(c2/4.0))
+						(x,y, particle['in_color_count'], approx_blob_area)
 
 				particle['in_color_count'] = 0   # reset counter
+				
+				blob_num = particle['blob_num']    # get particle's blob num
+				blobs[blob_num]['num_reflections'] += 1   # increment reflections in blob
+				if (blobs[blob_num]['max_sqr_found'] < r2):   # set max squared radius if found is greater
+					print '\tsetting max area of blob'
+					blobs[blob_num]['max_sqr_found'] = r2
 			else:
 				print "\tnormal update"
 				particle['in_color_count'] += 1    # increment counter
