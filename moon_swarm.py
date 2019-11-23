@@ -33,23 +33,25 @@ plt.ylim(0,img_y)   # set y limits of plot
 # Output Images 
 ax.imshow(img, origin='lower')    # show gravity map on plot
 
-states = {0:"Travelling", 1:"Inside large blob", 2:"Edge Tracing"}
+states = {0:"Travelling", 1:"Measuring blob"}   # states a particle can be in
 
 # Create Swarm
 swarm_size = 1
 swarm = np.zeros(swarm_size, dtype=[('position',       int, 2),    # Position (x,y)
                                    ('velocity',        int, 2),    # Velocity (dx,dy)
                                    ('color',           float, 3),  # Color (r,g,b)
+                                   ('group',		   int, 1),    # Group
                                    ('state',   		   int, 1),    # Is currently tracing edge
-                                   ('last_move',       int, 1),    # Recently moved neighboring index
-                                   ('backtrack_point', int, 2),    # 
+                                   ('blob_num',        int, 1),    # Number of blob it is tracking. 0=none
                                    ('in_color_count',  int, 1)])   # Num iter in color
 
-# return random int, not 0
+# return random int
 # n - item count, d - dimentions per item
+velocity_min = -3
+velocity_max = 3
 def get_rand_velocity(n, d):
-	#return np.random.choice([-5,-4,-3,-2,-1,1,2,4,5], (n, d))
-	return np.random.choice([-3,-2,-1,1,2,3], (n, d))
+	a = [x for x in range(velocity_min, velocity_max+1)]
+	return np.random.choice(a, (n, d))
 
 scale = 10
 particle_size = 25 * scale  # Set particle size
@@ -61,6 +63,10 @@ swarm['velocity'] = get_rand_velocity(swarm_size, 2)   # Set velocity components
 #particle['color'] = (1, 0.0784, 0.576)   # pink color
 swarm['color'] = [tuple(img[particle['position'][1]][particle['position'][0]]) for particle in swarm]
 
+# Found blob data
+next_blob_num = 1   # for use when a new blob is discovered
+blobs = np.empty(0, dtype=[('max_radius_found', int, 1),
+						   ('approx_position',  int, 2)])
 
 """
 THIS IS FOR TESTING, REMOVE LATER
@@ -92,23 +98,6 @@ def set_markers():
 
 set_markers() # set plot markers as triangles with rotation wrt velocity
 
-def translate_neighbor_to_velocity(idx):
-	_vy = 0
-	_vx = 0
-	if (idx in (6,7,0)):
-		_vy = 1
-	if (idx in (5,1)):
-		_vy = 0
-	if (idx in (4,3,2)):
-		_vy = -1
-	if (idx in (0,1,2)):
-		_vx = 1
-	if (idx in (7,3)):
-		_vx = 0
-	if (idx in (6,5,4)):
-		_vx = -1
-	return (_vx, _vy)
-
 # Return true if inside, false if outside
 def is_inside_img_bounds(_x, _y):
 	return not ((_x < 0) or (_x > img_x-1) or (_y < 0) or (_y > img_y-1))
@@ -138,6 +127,8 @@ def adjust_for_img_bounds(_x, _y, _vx, _vy, particle):
 		_y += _vy   # normal movement
 	return _x, _y, _vx, _vy
 
+
+# Called every animation frame
 def update(frame_number):
 	#print "Frame %d" % frame_number
 
@@ -147,7 +138,7 @@ def update(frame_number):
 		vx = particle['velocity'][0]   # velocity x component
 		vy = particle['velocity'][1]   # velocity y component
 
-		# Check position and neighbor color data
+		# Check if current position is in color
 		position_color = tuple(img[y][x])
 		#print "P%d color = %s" % (idx, position_color)
 
@@ -162,9 +153,9 @@ def update(frame_number):
 				# Check if travelled far enough into blob
 				if (particle['in_color_count'] >= min_blob_size):
 					particle['state'] = 1
+					particle['blob_num'] = 1
 					print "\tEntered in blob state"
 			else:
-				print position_color, 
 				print "X(%d, %d), V(%d, %d) : not in color" % (x,y,vx,vy)
 				
 				particle['in_color_count'] = 0   # reset counter
@@ -179,27 +170,36 @@ def update(frame_number):
 		if (particle['state'] == 1):
 			print "X(%d, %d), V(%d, %d), %s : State == 1" % (x,y,vx,vy,"RED" if is_in_color(position_color) else "",)
 
-			particle['in_color_count'] += abs(vx) + abs(vy)   # increment counter
-
-			"""
-			while inside valid blob
-			travel until edge but don't overshoot
-			once on edge, stop/store radius counter
-
-			"""
+			# Check if next position will be out of bounds or outside blob
+			print "is next in color ? : ", is_in_color(tuple(img[y + vy][x + vx]))
 			if (is_inside_img_bounds(x + vx, y + vy) and not is_in_color(tuple(img[y + vy][x + vx]))):
-				# Don't overshoot boundary, but don't reverse
-				# need to reduce velocity to just hit in color edge
-							
+				# need to reduce velocity to just hit in color edge next update
 				next_vx = vx * -1   # store reversed velocity
 				next_vy = vy * -1   # store reversed velocity
-				
-				safety = 20
-				while (True):
-					safety -= 1
-					if (safety == 0):
-						print "ERROR IN LOOP!"
+
+				# Slightly change velocity
+				pos_range = [v for v in range(0, velocity_max+1)]
+				neg_range = [v for v in range(velocity_min, 1)]
+				all_range = np.union1d(pos_range,neg_range)
+
+				while (True):   # loop to ensure both components != 0
+					if (next_vx > 0):
+						next_vx = np.random.choice(pos_range)
+					elif (next_vx == 0):
+						next_vx = np.random.choice(all_range)
+					else:
+						next_vx = np.random.choice(neg_range)
+					if (next_vy > 0):
+						next_vy = np.random.choice(pos_range)
+					elif (next_vy == 0):
+						next_vy = np.random.choice(all_range)
+					else:
+						next_vy = np.random.choice(neg_range)
+
+					if (next_vx != 0 or next_vy != 0):  # redraw if both == 0
 						break
+
+				while (True):   # loop to find nearest position that's in color
 					if (vx != 0):
 						vx += -1 if vx > 0 else 1
 					if (is_in_color(tuple(img[y + vy][x + vx]))):
@@ -208,9 +208,12 @@ def update(frame_number):
 						vy += -1 if vy > 0 else 1
 					if (is_in_color(tuple(img[y + vy][x + vx]))):
 						break
-				x = x + vx
+				
+				particle['in_color_count'] += abs(vx) + abs(vy)   # increment counter with adjusted velocity
+
+				x = x + vx   # set position as just on the edge
 				y = y + vy
-				vx = next_vx
+				vx = next_vx   # set velocity as reverse of previous
 				vy = next_vy
 				print "\tflipped V, setting x=%d,y=%d" % (x,y)
 			else:
@@ -273,7 +276,7 @@ def onpress(event):
 		animation.event_source.interval = interval
 
 run_anim = True
-interval = 500
+interval = 300
 min_interval = 25
 max_interval = 500
 iterations = 180
