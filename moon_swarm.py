@@ -17,7 +17,7 @@ def is_in_color(color):
 
 # Read Image
 #img = mpimg.imread('grail_gravity_map_moon_sm.jpg')[::-1,:]
-img = mpimg.imread('test/test3.jpg')[::-1,:]#[:,:,:3]
+img = mpimg.imread('test/test4.jpg')[::-1,:]#[:,:,:3]
 
 # Figure
 fig, ax = plt.subplots()
@@ -35,6 +35,14 @@ ax.imshow(img, origin='lower')    # show gravity map on plot
 
 states = {0:"Travelling", 1:"Measuring blob"}   # states a particle can be in
 
+# return random int
+# n - item count, d - dimentions per item
+velocity_min = -3
+velocity_max = 3
+def get_rand_velocity(n, d):
+	a = [x for x in range(velocity_min, velocity_max+1)]
+	return np.random.choice(a, (n, d))
+
 # Create Swarm
 swarm_size = 1
 swarm = np.zeros(swarm_size, dtype=[('position',       int, 2),    # Position (x,y)
@@ -43,15 +51,7 @@ swarm = np.zeros(swarm_size, dtype=[('position',       int, 2),    # Position (x
                                    ('group',		   int, 1),    # Group
                                    ('state',   		   int, 1),    # Is currently tracing edge
                                    ('blob_num',        int, 1),    # Number of blob it is tracking. 0=none
-                                   ('in_color_count',  int, 1)])   # Num iter in color
-
-# return random int
-# n - item count, d - dimentions per item
-velocity_min = -3
-velocity_max = 3
-def get_rand_velocity(n, d):
-	a = [x for x in range(velocity_min, velocity_max+1)]
-	return np.random.choice(a, (n, d))
+								   ('in_color_count',  int, 1)])   # Num iter in color
 
 scale = 10
 particle_size = 25 * scale  # Set particle size
@@ -66,6 +66,7 @@ swarm['color'] = [tuple(img[particle['position'][1]][particle['position'][0]]) f
 # Found blob data
 next_blob_num = 1   # for use when a new blob is discovered
 blobs = np.empty(0, dtype=[('max_radius_found', int, 1),
+						   ('group',			int, 1),
 						   ('approx_position',  int, 2)])
 
 """
@@ -107,26 +108,33 @@ def adjust_for_img_bounds(_x, _y, _vx, _vy, particle):
 	if (_x + _vx < 0):   # check min bounds x
 		_x = 0
 		_vx *= -1
-		particle['in_color_count'] = 0   # reset counter
+		particle['in_color_count_m'] = 0   # reset counter
+		particle['in_color_count_cnt'] = 0   # reset counter
 	elif (_x + _vx > (img_x - 1)):   # check max bounds x, sub 1 bc img_x is size not index
 		_x = (img_x - 1)
 		_vx *= -1
-		particle['in_color_count'] = 0   # reset counter
+		particle['in_color_count_m'] = 0   # reset counter
+		particle['in_color_count_cnt'] = 0   # reset counter
 	else:
 		_x += _vx   # normal movement
 
 	if (_y + _vy < 0):   # check min bounds y
 		_y = 0
 		_vy *= -1
-		particle['in_color_count'] = 0   # reset counter
+		particle['in_color_count_m'] = 0   # reset counter
+		particle['in_color_count_cnt'] = 0   # reset counter
 	elif (_y + _vy > (img_y - 1)):   # check max bounds y
 		_y = (img_y - 1)
 		_vy *= -1
-		particle['in_color_count'] = 0   # reset counter
+		particle['in_color_count_m'] = 0   # reset counter
+		particle['in_color_count_cnt'] = 0   # reset counter
 	else:
 		_y += _vy   # normal movement
 	return _x, _y, _vx, _vy
 
+# Calculate estimated area of a circle given squared radius
+def calculate_A_circle_sqd(r2):
+	return 3.1415927 * r2
 
 # Called every animation frame
 def update(frame_number):
@@ -148,21 +156,25 @@ def update(frame_number):
 			if (is_in_color(position_color)):
 				print "X(%d, %d), V(%d, %d), RED, CC=%d : in red" % (x,y,vx,vy, particle['in_color_count'])
 
-				particle['in_color_count'] += abs(vx) + abs(vy)   # increment counter
-
 				# Check if travelled far enough into blob
-				if (particle['in_color_count'] >= min_blob_size):
+				d = (abs(vx) + abs(vy)) * particle['in_color_count']   # distance travelled
+				if (d >= min_blob_size):
 					particle['state'] = 1
 					particle['blob_num'] = 1
 					print "\tEntered in blob state"
+				else:
+					particle['in_color_count'] += 1    # increment counter
 			else:
 				print "X(%d, %d), V(%d, %d) : not in color" % (x,y,vx,vy)
 				
 				particle['in_color_count'] = 0   # reset counter
 
-				# Randomly mutate velocity
-				vx = vx if (np.random.rand() > 0.02) else get_rand_velocity(1, 1) 
-				vy = vy if (np.random.rand() > 0.02) else get_rand_velocity(1, 1)
+				# Randomly mutate velocity, ensure both not 0
+				while(True):
+					vx = vx if (np.random.rand() > 0.05) else get_rand_velocity(1, 1) 
+					vy = vy if (np.random.rand() > 0.05) else get_rand_velocity(1, 1)
+					if (vx != 0 or vy != 0):   # loop while both == 0
+						break
 
 			x, y, vx, vy = adjust_for_img_bounds(x, y, vx, vy, particle)
 
@@ -174,6 +186,10 @@ def update(frame_number):
 			print "is next in color ? : ", is_in_color(tuple(img[y + vy][x + vx]))
 			if (is_inside_img_bounds(x + vx, y + vy) and not is_in_color(tuple(img[y + vy][x + vx]))):
 				# need to reduce velocity to just hit in color edge next update
+
+				a = particle['in_color_count'] * vx   # calc distance using iterations and velocity
+				b = particle['in_color_count'] * vy
+
 				next_vx = vx * -1   # store reversed velocity
 				next_vy = vy * -1   # store reversed velocity
 
@@ -208,16 +224,24 @@ def update(frame_number):
 						vy += -1 if vy > 0 else 1
 					if (is_in_color(tuple(img[y + vy][x + vx]))):
 						break
-				
-				particle['in_color_count'] += abs(vx) + abs(vy)   # increment counter with adjusted velocity
+
+				a += vx   # add last movements to distance
+				b += vy
 
 				x = x + vx   # set position as just on the edge
 				y = y + vy
 				vx = next_vx   # set velocity as reverse of previous
 				vy = next_vy
-				print "\tflipped V, setting x=%d,y=%d" % (x,y)
+
+				c2 = a**2 + b**2   # calculate Euclidean c^2,  where c^2 / 4 = r^2 
+
+				print "\tflipped V, setting x=%d,y=%d, COUNT=%d, A=%.2f" % \
+						(x,y, particle['in_color_count'], calculate_A_circle_sqd(c2/4.0))
+
+				particle['in_color_count'] = 0   # reset counter
 			else:
 				print "\tnormal update"
+				particle['in_color_count'] += 1    # increment counter
 				x, y, vx, vy = adjust_for_img_bounds(x, y, vx, vy, particle)
 
 		# set particle data
