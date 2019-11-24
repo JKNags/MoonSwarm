@@ -7,19 +7,19 @@ import numpy as np
 import math
 
 # Global Variables
-min_blob_size = 8   # Distance for particle to reflect within blob
+min_blob_size = 25   # Distance for particle to reflect within blob
 search_color = (255, 0, 0)
 color_threshold_r = 200  # Min
 color_threshold_g = 100   # Max
 color_threshold_b = 100   # Max
-max_num_reflections = 20
+max_num_reflections = 50
 
 def is_in_color(color):
 	return color[0] > color_threshold_r and color[1] < color_threshold_g and color[2] < color_threshold_b
 
 # Read Image
-#img = mpimg.imread('grail_gravity_map_moon_sm.jpg')[::-1,:]
-img = mpimg.imread('test/test6.jpg')[::-1,:]#[:,:,:3]
+img = mpimg.imread('grail_gravity_map_moon.jpg')[::-1,:]
+#img = mpimg.imread('test/test9.jpg')[::-1,:]#[:,:,:3]
 
 # Figure
 fig, ax = plt.subplots()
@@ -39,16 +39,16 @@ states = {0:"Travelling", 1:"Measuring blob"}   # states a particle can be in
 
 # return random int
 # n - item count, d - dimentions per item
-velocity_min = -3
-velocity_max = 3
+velocity_min = -7
+velocity_max = 7
 velocity_range = velocity_max - velocity_min
 def get_rand_velocity(n, d):
 	a = [x for x in range(velocity_min, velocity_max+1)]
 	return np.random.choice(a, (n, d))
 
 # Create Swarm
-swarm_size = 3
-num_groups = 1
+swarm_size = 50
+num_groups = 10
 swarm = np.zeros(swarm_size, dtype=[('position',       		int, 2),    # Position (x,y)
                                    ('velocity',        		int, 2),    # Velocity (dx,dy)
                                    ('color',           		float, 3),  # Color (r,g,b)
@@ -84,8 +84,8 @@ blobs = np.empty(0, dtype=[('max_sqr_found',    int, 1),
 """
 THIS IS FOR TESTING, REMOVE LATER
 """
-swarm['position'][:,0] = 1 #180 #182
-swarm['position'][:,1] = 1 #88 #386
+#swarm['position'][:,0] = 1 #180 #182
+#swarm['position'][:,1] = 1 #88 #386
 #swarm['velocity'] = (1,1)
 """
 THIS IS FOR TESTING, REMOVE LATER
@@ -159,7 +159,7 @@ def update(frame_number):
 		position_color = tuple(img[y][x])
 		#print "P%d color = %s" % (idx, position_color)
 
-		print "particle", p_idx
+		#print "particle", p_idx
 
 		
 		# Check blob's reflections for max
@@ -167,8 +167,8 @@ def update(frame_number):
 		if (blob_num >= 0):
 			blob = blobs[blob_num]
 			if (blob['num_reflections'] > max_num_reflections):
-				print "\nBlob %d reflection count maxed. resetting particles\n" % blob_num
-				circle = Circle((blob['position'][0], blob['position'][1]), math.sqrt(blob['max_sqr_found']), edgecolor=(.5,.5,.5,.9), facecolor=(.8, .8, .8, .5))
+				#print "\nBlob %d reflection count maxed. resetting particles\n" % blob_num
+				circle = Circle((blob['position'][0], blob['position'][1]), math.sqrt(blob['max_sqr_found']), edgecolor=(.5,.5,.5,1), facecolor=(.8, .8, .8, .6))
 				ax.add_patch(circle)
 
 				# reset group's variables
@@ -191,8 +191,8 @@ def update(frame_number):
 						d2 = (x - blob_x)**2 + (y - blob_y)**2
 						r2 = d2 / 4
 
-						print "particle_in_other_blob_radius: P(%d,%d),  B%d(%d,%d), blob_r2=%.4f, r2=%.2f" % \
-							(x, y, blob_idx, blob_x, blob_y, blob_r2, r2)
+						#print "particle_in_other_blob_radius: P(%d,%d),  B%d(%d,%d), blob_r2=%.4f, r2=%.2f" % \
+						#	(x, y, blob_idx, blob_x, blob_y, blob_r2, r2)
 
 						if (r2 <= blob_r2):   # true if distance^2 < r^2 of blob
 							return True
@@ -202,7 +202,7 @@ def update(frame_number):
 				if (particle_in_other_blob_radius(x, y) or not is_in_color(position_color)):
 					# particle is in another blob's radius or is not in color
 
-					print "X(%d, %d), V(%d, %d) : not in color" % (x,y,vx,vy)
+					#print "X(%d, %d), V(%d, %d) : not in color" % (x,y,vx,vy)
 					
 					particle['in_color_count'] = 0   # reset counter
 
@@ -217,13 +217,13 @@ def update(frame_number):
 				else:
 					# particle is in color
 
-					print "X(%d, %d), V(%d, %d), RED, CC=%d : in red" % (x,y,vx,vy, particle['in_color_count'])
+					#print "X(%d, %d), V(%d, %d), RED, CC=%d : in red" % (x,y,vx,vy, particle['in_color_count'])
 
 					# Check if travelled far enough into blob
 					d = (abs(vx) + abs(vy)) * particle['in_color_count']   # distance travelled
 					if (d >= min_blob_size):
 						# First blob found for group
-						print 'assigning new blob num -', next_blob_num
+						#print 'assigning new blob num -', next_blob_num
 
 						particle['state'] = 1
 						
@@ -232,7 +232,7 @@ def update(frame_number):
 						blobs[next_blob_num]['position'] = (x, y)   # set approximate position of blob
 						next_blob_num += 1
 
-						print "\tEntered in blob state"
+						#print "\tEntered in blob state"
 					else:
 						particle['in_color_count'] += 1    # increment counter
 						x, y, vx, vy = update_x_with_v(x, y, vx, vy, particle)
@@ -246,13 +246,13 @@ def update(frame_number):
 
 				d = math.sqrt(dx**2 + dy**2)
 
-				print "HEADING TOWARDS BLOB"
-				print "\tx:%d, y:%d,   dx:%d, dy:%d,  d:%.4f " % (x, y, dx, dy, d)
-				print "\tblob_num:%d, blob_x:%d, blob_y:%d" % (particle['blob_num'],blobs[particle['blob_num']]['position'][0],blobs[particle['blob_num']]['position'][1])
+				#print "HEADING TOWARDS BLOB"
+				#print "\tx:%d, y:%d,   dx:%d, dy:%d,  d:%.4f " % (x, y, dx, dy, d)
+				#print "\tblob_num:%d, blob_x:%d, blob_y:%d" % (particle['blob_num'],blobs[particle['blob_num']]['position'][0],blobs[particle['blob_num']]['position'][1])
 
 				if (d <= min_blob_size and is_in_color(position_color)):
 					particle['state'] = 1
-					print "\tSetting state to 1: %.4f <= %.4f" % (d , min_blob_size) 
+					#print "\tSetting state to 1: %.4f <= %.4f" % (d , min_blob_size) 
 				else:
 					vx = dx / d * (velocity_range / 2)
 					vy = dy / d * (velocity_range / 2)
@@ -261,7 +261,7 @@ def update(frame_number):
 
 		# Check that state is searching blob
 		if (particle['state'] == 1):
-			print "X(%d, %d), V(%d, %d), %s : State == 1" % (x,y,vx,vy,"RED" if is_in_color(position_color) else "",)
+			#print "X(%d, %d), V(%d, %d), %s : State == 1" % (x,y,vx,vy,"RED" if is_in_color(position_color) else "",)
 
 			# Check if next position will be out of bounds or outside blob
 			if (is_inside_img_bounds(x + vx, y + vy) and not is_in_color(tuple(img[y + vy][x + vx]))):
@@ -310,12 +310,12 @@ def update(frame_number):
 					if (safety == 0):
 						print "NEAREST IN COLOR X LOOP BROKEN"*5
 						break
-					print ("\tnearest in color : (%d, %d) : %s" % (vx, vy, is_in_color(tuple(img[y + vy][x + vx]))))
+					#print ("\tnearest in color : (%d, %d) : %s" % (vx, vy, is_in_color(tuple(img[y + vy][x + vx]))))
 					if (vx != 0):
 						vx += -1 if vx > 0 else 1
 					if (is_in_color(tuple(img[y + vy][x + vx]))):
 						break
-					print ("\tnearest in color : (%d, %d) : %s" % (vx, vy, is_in_color(tuple(img[y + vy][x + vx]))))
+					#print ("\tnearest in color : (%d, %d) : %s" % (vx, vy, is_in_color(tuple(img[y + vy][x + vx]))))
 					if (vy != 0):
 						vy += -1 if vy > 0 else 1
 					if (is_in_color(tuple(img[y + vy][x + vx]))):
@@ -333,18 +333,18 @@ def update(frame_number):
 				r2 = c2 / 4
 				approx_blob_area = calculate_A_circle_sqr(r2)
 
-				print "\tflipped V, setting x=%d,y=%d, COUNT=%d, A=%.2f" % \
-						(x,y, particle['in_color_count'], approx_blob_area)
+				#print "\tflipped V, setting x=%d,y=%d, COUNT=%d, A=%.2f" % \
+				#		(x,y, particle['in_color_count'], approx_blob_area)
 
 				particle['in_color_count'] = 0   # reset counter
 
 				blob_num = particle['blob_num']    # get particle's blob num
 				blobs[blob_num]['num_reflections'] += 1   # increment reflections in blob
 				if (blobs[blob_num]['max_sqr_found'] < r2):   # set max squared radius if found is greater
-					print '\tsetting max area of blob,'
+					#print '\tsetting max area of blob,'
 					blobs[blob_num]['max_sqr_found'] = r2
 					if (particle['reflection_position'][0] > 0 and particle['reflection_position'][1] > 0):   # ensure position is valid
-						print '\tsetting position of blob P(x:%d, y:%d), Bold(%d, %d), Bnew(%d, %d)' % \
+						#print '\tsetting position of blob P(x:%d, y:%d), Bold(%d, %d), Bnew(%d, %d)' % \
 						(x,y,particle['reflection_position'][0], particle['reflection_position'][0], abs(x + particle['reflection_position'][0]) / 2, particle['reflection_position'][1] / 2)
 						blobs[blob_num]['position'][0] = abs(x + particle['reflection_position'][0]) / 2   # Set blob position as midpoint of particle path
 						blobs[blob_num]['position'][1] = abs(y + particle['reflection_position'][1]) / 2
@@ -353,7 +353,7 @@ def update(frame_number):
 				particle['reflection_position'][1] = y
 
 			else:
-				print "\tnormal update"
+				#print "\tnormal update"
 				particle['in_color_count'] += 1    # increment counter
 				x, y, vx, vy = update_x_with_v(x, y, vx, vy, particle)
 
@@ -429,7 +429,7 @@ def onpress(event):
 		animation.event_source.interval = interval
 
 run_anim = True
-interval = 30
+interval = 5
 min_interval = 200
 max_interval = 500
 iterations = 180
