@@ -7,11 +7,11 @@ import numpy as np
 import math
 
 # Global Variables
-min_blob_size = 25   # Distance for particle to reflect within blob
+min_blob_size = 30   # Distance for particle to reflect within blob
 search_color = (255, 0, 0)
 color_threshold_r = 200  # Min
-color_threshold_g = 100   # Max
-color_threshold_b = 100   # Max
+color_threshold_g = 75   # Max
+color_threshold_b = 75   # Max
 max_num_reflections = 50
 
 def is_in_color(color):
@@ -19,7 +19,7 @@ def is_in_color(color):
 
 # Read Image
 img = mpimg.imread('grail_gravity_map_moon.jpg')[::-1,:]
-#img = mpimg.imread('test/test9.jpg')[::-1,:]#[:,:,:3]
+#img = mpimg.imread('test/test7.jpg')[::-1,:]#[:,:,:3]
 
 # Figure
 fig, ax = plt.subplots()
@@ -49,14 +49,14 @@ def get_rand_velocity(n, d):
 # Create Swarm
 swarm_size = 50
 num_groups = 10
-swarm = np.zeros(swarm_size, dtype=[('position',       		int, 2),    # Position (x,y)
-                                   ('velocity',        		int, 2),    # Velocity (dx,dy)
+swarm = np.zeros(swarm_size, dtype=[('position',       		int,   2),    # Position (x,y)
+                                   ('velocity',        		int,   2),    # Velocity (dx,dy)
                                    ('color',           		float, 3),  # Color (r,g,b)
-                                   ('group_num',	   		int, 1),    # Group
-                                   ('state',   		   		int, 1),    # Is currently tracing edge
-                                   ('blob_num',        		int, 1),    # Number of blob it is tracking. 0=none
-                                   ('reflection_position',  int, 2),    # Position of last reflection bounce
-								   ('in_color_count',  		int, 1)])   # Num iter in color
+                                   ('group_num',	   		int,   1),    # Group
+                                   ('state',   		   		int,   1),    # Is currently tracing edge
+                                   ('blob_num',        		int,   1),    # Number of blob it is tracking. 0=none
+                                   ('reflection_position',  int,   2),    # Position of last reflection bounce
+								   ('in_color_count',  		int,   1)])   # Num iter in color
 
 scale = 10
 particle_size = 25 * scale  # Set particle size
@@ -77,7 +77,7 @@ for group_num in range(0, num_groups):
 
 # Blob data
 next_blob_num = 0   # for use when a new blob is discovered
-blobs = np.empty(0, dtype=[('max_sqr_found',    int, 1),
+blobs = np.empty(0, dtype=[('max_r2_found',    int, 1),
 						   ('num_reflections',  int, 1),
 						   ('position',			int, 2)])
 
@@ -141,7 +141,7 @@ def update_x_with_v(_x, _y, _vx, _vy, particle):
 	return _x, _y, _vx, _vy
 
 # Calculate estimated area of a circle given squared radius
-def calculate_A_circle_sqr(r2):
+def calculate_A_circle_r2(r2):
 	return 3.1415927 * r2
 
 # Called every animation frame
@@ -150,6 +150,7 @@ def update(frame_number):
 	global next_blob_num
 
 	for p_idx,particle in enumerate(swarm):
+		# extract particle data for easy access
 		x = particle['position'][0]   # position x coordinate
 		y = particle['position'][1]   # position y coordinate
 		vx = particle['velocity'][0]   # velocity x component
@@ -160,7 +161,6 @@ def update(frame_number):
 		#print "P%d color = %s" % (idx, position_color)
 
 		#print "particle", p_idx
-
 		
 		# Check blob's reflections for max
 		blob_num = particle['blob_num']
@@ -168,7 +168,7 @@ def update(frame_number):
 			blob = blobs[blob_num]
 			if (blob['num_reflections'] > max_num_reflections):
 				#print "\nBlob %d reflection count maxed. resetting particles\n" % blob_num
-				circle = Circle((blob['position'][0], blob['position'][1]), math.sqrt(blob['max_sqr_found']), edgecolor=(.5,.5,.5,1), facecolor=(.8, .8, .8, .6))
+				circle = Circle((blob['position'][0], blob['position'][1]), math.sqrt(blob['max_r2_found']), edgecolor=(.5,.5,.5,1), facecolor=(.8, .8, .8, .6))
 				ax.add_patch(circle)
 
 				# reset group's variables
@@ -186,7 +186,7 @@ def update(frame_number):
 					for blob_idx,blob in enumerate(blobs):
 						blob_x = blob['position'][0]
 						blob_y = blob['position'][1]
-						blob_r2 = blob['max_sqr_found']
+						blob_r2 = blob['max_r2_found']
 
 						d2 = (x - blob_x)**2 + (y - blob_y)**2
 						r2 = d2 / 4
@@ -220,7 +220,7 @@ def update(frame_number):
 					#print "X(%d, %d), V(%d, %d), RED, CC=%d : in red" % (x,y,vx,vy, particle['in_color_count'])
 
 					# Check if travelled far enough into blob
-					d = (abs(vx) + abs(vy)) * particle['in_color_count']   # distance travelled
+					d = math.sqrt( (vx * particle['in_color_count'])**2 + (vy * particle['in_color_count'])**2 )  # distance travelled
 					if (d >= min_blob_size):
 						# First blob found for group
 						#print 'assigning new blob num -', next_blob_num
@@ -251,9 +251,11 @@ def update(frame_number):
 				#print "\tblob_num:%d, blob_x:%d, blob_y:%d" % (particle['blob_num'],blobs[particle['blob_num']]['position'][0],blobs[particle['blob_num']]['position'][1])
 
 				if (d <= min_blob_size and is_in_color(position_color)):
+					# particle is within blob
 					particle['state'] = 1
 					#print "\tSetting state to 1: %.4f <= %.4f" % (d , min_blob_size) 
 				else:
+					# particle still travelling towards blob
 					vx = dx / d * (velocity_range / 2)
 					vy = dy / d * (velocity_range / 2)
 
@@ -330,8 +332,8 @@ def update(frame_number):
 				vy = next_vy
 
 				c2 = a**2 + b**2   # calculate Euclidean c^2,  where c^2 / 4 = r^2 
-				r2 = c2 / 4
-				approx_blob_area = calculate_A_circle_sqr(r2)
+				r2 = c2 / 4        #   this code is attemptingt to avoid square roots
+				approx_blob_area = calculate_A_circle_r2(r2)
 
 				#print "\tflipped V, setting x=%d,y=%d, COUNT=%d, A=%.2f" % \
 				#		(x,y, particle['in_color_count'], approx_blob_area)
@@ -340,9 +342,9 @@ def update(frame_number):
 
 				blob_num = particle['blob_num']    # get particle's blob num
 				blobs[blob_num]['num_reflections'] += 1   # increment reflections in blob
-				if (blobs[blob_num]['max_sqr_found'] < r2):   # set max squared radius if found is greater
+				if (r2 > blobs[blob_num]['max_r2_found']):   # set max squared radius if found is greater
 					#print '\tsetting max area of blob,'
-					blobs[blob_num]['max_sqr_found'] = r2
+					blobs[blob_num]['max_r2_found'] = r2
 					if (particle['reflection_position'][0] > 0 and particle['reflection_position'][1] > 0):   # ensure position is valid
 						#print '\tsetting position of blob P(x:%d, y:%d), Bold(%d, %d), Bnew(%d, %d)' % \
 						(x,y,particle['reflection_position'][0], particle['reflection_position'][0], abs(x + particle['reflection_position'][0]) / 2, particle['reflection_position'][1] / 2)
@@ -353,6 +355,8 @@ def update(frame_number):
 				particle['reflection_position'][1] = y
 
 			else:
+				# particle traversing blob
+
 				#print "\tnormal update"
 				particle['in_color_count'] += 1    # increment counter
 				x, y, vx, vy = update_x_with_v(x, y, vx, vy, particle)
@@ -414,7 +418,7 @@ def onpress(event):
 			print "BLOBS:"
 			for blob in blobs:
 				print "\tBlob (X:%d, Y:%d) max_2r=%.2f,  A=%.2f,  num_refl=%d" \
-					% (blob['position'][0], blob['position'][1], blob['max_sqr_found'], calculate_A_circle_sqr(blob['max_sqr_found']), blob['num_reflections'])
+					% (blob['position'][0], blob['position'][1], blob['max_r2_found'], calculate_A_circle_r2(blob['max_r2_found']), blob['num_reflections'])
 		else:
 			run_anim = True
 			animation.event_source.start()
@@ -429,7 +433,7 @@ def onpress(event):
 		animation.event_source.interval = interval
 
 run_anim = True
-interval = 5
+interval = 10
 min_interval = 200
 max_interval = 500
 iterations = 180
