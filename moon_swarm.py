@@ -17,7 +17,7 @@ def is_in_color(color):
 
 # Read Image
 #img = mpimg.imread('grail_gravity_map_moon_sm.jpg')[::-1,:]
-img = mpimg.imread('test/test4.jpg')[::-1,:]#[:,:,:3]
+img = mpimg.imread('test/test5.jpg')[::-1,:]#[:,:,:3]
 
 # Figure
 fig, ax = plt.subplots()
@@ -39,13 +39,14 @@ states = {0:"Travelling", 1:"Measuring blob"}   # states a particle can be in
 # n - item count, d - dimentions per item
 velocity_min = -3
 velocity_max = 3
+velocity_range = velocity_max - velocity_min
 def get_rand_velocity(n, d):
 	a = [x for x in range(velocity_min, velocity_max+1)]
 	return np.random.choice(a, (n, d))
 
 # Create Swarm
+swarm_size = 3
 num_groups = 1
-swarm_size = 1
 swarm = np.zeros(swarm_size, dtype=[('position',       int, 2),    # Position (x,y)
                                    ('velocity',        int, 2),    # Velocity (dx,dy)
                                    ('color',           float, 3),  # Color (r,g,b)
@@ -154,18 +155,23 @@ def update(frame_number):
 		position_color = tuple(img[y][x])
 		#print "P%d color = %s" % (idx, position_color)
 
+		print "particle", p_idx
+
 		# Check that state is travelling
 		if (particle['state'] == 0):
-			# Check if current position is in color
-			if (is_in_color(position_color)):
-				print "X(%d, %d), V(%d, %d), RED, CC=%d : in red" % (x,y,vx,vy, particle['in_color_count'])
 
-				# Check if travelled far enough into blob
-				d = (abs(vx) + abs(vy)) * particle['in_color_count']   # distance travelled
-				if (d >= min_blob_size):
-					particle['state'] = 1
+			if (particle['blob_num'] < 0):
+				# No blob found for group
 
-					if (particle['blob_num'] < 0):
+				# Check if current position is in color
+				if (is_in_color(position_color)):
+					print "X(%d, %d), V(%d, %d), RED, CC=%d : in red" % (x,y,vx,vy, particle['in_color_count'])
+
+					# Check if travelled far enough into blob
+					d = (abs(vx) + abs(vy)) * particle['in_color_count']   # distance travelled
+					if (d >= min_blob_size):
+						particle['state'] = 1
+
 						# First blob found for group
 						print 'assigning new blob num -', next_blob_num
 						blobs.resize(next_blob_num + 1)   # add new blob to list
@@ -173,20 +179,31 @@ def update(frame_number):
 						blobs[next_blob_num]['position'] = (x, y)   # set approximate position of blob
 						next_blob_num += 1
 
-					print "\tEntered in blob state"
+						print "\tEntered in blob state"
+					else:
+						particle['in_color_count'] += 1    # increment counter
 				else:
-					particle['in_color_count'] += 1    # increment counter
-			else:
-				print "X(%d, %d), V(%d, %d) : not in color" % (x,y,vx,vy)
-				
-				particle['in_color_count'] = 0   # reset counter
+					print "X(%d, %d), V(%d, %d) : not in color" % (x,y,vx,vy)
+					
+					particle['in_color_count'] = 0   # reset counter
 
-				# Randomly mutate velocity, ensure both not 0
-				while(True):
-					vx = vx if (np.random.rand() > 0.05) else get_rand_velocity(1, 1) 
-					vy = vy if (np.random.rand() > 0.05) else get_rand_velocity(1, 1)
-					if (vx != 0 or vy != 0):   # loop while both == 0
-						break
+					# Randomly mutate velocity, ensure both not 0
+					while(True):
+						vx = vx if (np.random.rand() > 0.05) else get_rand_velocity(1, 1) 
+						vy = vy if (np.random.rand() > 0.05) else get_rand_velocity(1, 1)
+						if (vx != 0 or vy != 0):   # loop while both == 0
+							break
+			else:
+				# if travelling and a blob is found for group, head towards it
+				dx = blobs[particle['blob_num']]['position'][0] - x
+				dy = blobs[particle['blob_num']]['position'][1] - y
+				d = float(abs(dx) + abs(dy))
+
+				if (d <= min_blob_size):
+					particle['state'] = 1
+				else:
+					vx = dx / d * (velocity_range / 2)
+					vy = dy / d * (velocity_range / 2)
 
 			x, y, vx, vy = adjust_for_img_bounds(x, y, vx, vy, particle)
 
@@ -212,7 +229,13 @@ def update(frame_number):
 				pos_range = all_range[len(all_range)/2:]
 				neg_range = all_range[0:len(all_range)/2+1]
 
+				safety = 40
 				while (True):   # loop to ensure both components != 0
+					safety -= 1
+					if (safety == 0):
+						print "NEXT VELOCITY LOOP BROKEN"*3
+						break
+
 					if (next_vx > 0):
 						next_vx = np.random.choice(pos_range)
 					elif (next_vx == 0):
@@ -229,11 +252,18 @@ def update(frame_number):
 					if (next_vx != 0 or next_vy != 0):  # redraw if both == 0
 						break
 
+				safety = 40
 				while (True):   # loop to find nearest position that's in color
+					safety -= 1
+					if (safety == 0):
+						print "NEAREST IN COLOR X LOOP BROKEN"*3
+						breakx
+					print ("\tnearest in color : (%d, %d) : %s" % (vx, vy, is_in_color(tuple(img[y + vy][x + vx]))))
 					if (vx != 0):
 						vx += -1 if vx > 0 else 1
 					if (is_in_color(tuple(img[y + vy][x + vx]))):
 						break
+					print ("\tnearest in color : (%d, %d) : %s" % (vx, vy, is_in_color(tuple(img[y + vy][x + vx]))))
 					if (vy != 0):
 						vy += -1 if vy > 0 else 1
 					if (is_in_color(tuple(img[y + vy][x + vx]))):
@@ -302,12 +332,18 @@ def onclick(event):
 def onpress(event):
 	global run_anim
 	global interval, min_interval, max_interval
+	global blobs
 
 	# Start/Stop animation on any key press
 	if (event.key == "x"):
 		if (run_anim):
 			run_anim = False
 			animation.event_source.stop()
+
+			print "BLOBS:"
+			for blob in blobs:
+				print "\tBlob (X:%d, Y:%d) max_2r=%.2f,  A=%.2f,  num_refl=%d" \
+					% (blob['position'][0], blob['position'][1], blob['max_sqr_found'], calculate_A_circle_sqr(blob['max_sqr_found']), blob['num_reflections'])
 		else:
 			run_anim = True
 			animation.event_source.start()
