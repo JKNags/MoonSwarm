@@ -12,7 +12,7 @@ search_color = (255, 0, 0)
 color_threshold_r = 200  # Min
 color_threshold_g = 100   # Max
 color_threshold_b = 100   # Max
-max_num_reflections = 30
+max_num_reflections = 20
 
 def is_in_color(color):
 	return color[0] > color_threshold_r and color[1] < color_threshold_g and color[2] < color_threshold_b
@@ -187,11 +187,14 @@ def update(frame_number):
 						blob_r2 = blob['max_sqr_found']
 
 						d2 = (x - blob_x)**2 + (y - blob_y)**2
+						r2 = d2 / 4
 
-						print "particle_in_other_blob_radius: P(%d,%d),  B%d(%d,%d), d2=%.2f" % \
-							(x, y, blob_idx, blob_x, blob_y, d2)
+						print "particle_in_other_blob_radius: P(%d,%d),  B%d(%d,%d), blob_r2=%.4f, r2=%.2f" % \
+							(x, y, blob_idx, blob_x, blob_y, blob_r2, r2)
 
-						return d2 < blob_r2   # true if distance^2 < r^2 of blob
+						if (r2 <= blob_r2):   # true if distance^2 < r^2 of blob
+							return True
+					return False
 
 				# Check if particle is in another's radius
 				if (particle_in_other_blob_radius(x, y) or not is_in_color(position_color)):
@@ -217,10 +220,11 @@ def update(frame_number):
 					# Check if travelled far enough into blob
 					d = (abs(vx) + abs(vy)) * particle['in_color_count']   # distance travelled
 					if (d >= min_blob_size):
-						particle['state'] = 1
-
 						# First blob found for group
 						print 'assigning new blob num -', next_blob_num
+
+						particle['state'] = 1
+						
 						blobs.resize(next_blob_num + 1, refcheck=False)   # add new blob to list
 						swarm[particle['group_num'] * step : particle['group_num'] * step + step]['blob_num'] = next_blob_num
 						blobs[next_blob_num]['position'] = (x, y)   # set approximate position of blob
@@ -237,10 +241,14 @@ def update(frame_number):
 				# if travelling and a blob is found for group, head towards it
 				dx = blobs[particle['blob_num']]['position'][0] - x
 				dy = blobs[particle['blob_num']]['position'][1] - y
-				d = float(abs(dx) + abs(dy))
 
-				if (d <= min_blob_size):
+				d = math.sqrt(dx**2 + dy**2)
+
+				print "\tdx:%d, dy:%d,  d:%.4f " % (dx, dy, d)
+
+				if (d <= min_blob_size and is_in_color(position_color)):
 					particle['state'] = 1
+					print "\tSetting state to 1: %.4f <= %.4f" % (d , min_blob_size) 
 				else:
 					vx = dx / d * (velocity_range / 2)
 					vy = dy / d * (velocity_range / 2)
