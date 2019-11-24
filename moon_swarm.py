@@ -1,6 +1,7 @@
 import matplotlib.image as mpimg 
 import matplotlib.pyplot as plt 
 import matplotlib.markers as mmarkers
+from matplotlib.patches import Circle
 from matplotlib.animation import FuncAnimation
 import numpy as np
 import math
@@ -11,13 +12,14 @@ search_color = (255, 0, 0)
 color_threshold_r = 200  # Min
 color_threshold_g = 100   # Max
 color_threshold_b = 100   # Max
+max_num_reflections = 30
 
 def is_in_color(color):
 	return color[0] > color_threshold_r and color[1] < color_threshold_g and color[2] < color_threshold_b
 
 # Read Image
 #img = mpimg.imread('grail_gravity_map_moon_sm.jpg')[::-1,:]
-img = mpimg.imread('test/test5.jpg')[::-1,:]#[:,:,:3]
+img = mpimg.imread('test/test6.jpg')[::-1,:]#[:,:,:3]
 
 # Figure
 fig, ax = plt.subplots()
@@ -47,13 +49,14 @@ def get_rand_velocity(n, d):
 # Create Swarm
 swarm_size = 3
 num_groups = 1
-swarm = np.zeros(swarm_size, dtype=[('position',       int, 2),    # Position (x,y)
-                                   ('velocity',        int, 2),    # Velocity (dx,dy)
-                                   ('color',           float, 3),  # Color (r,g,b)
-                                   ('group_num',	   int, 1),    # Group
-                                   ('state',   		   int, 1),    # Is currently tracing edge
-                                   ('blob_num',        int, 1),    # Number of blob it is tracking. 0=none
-								   ('in_color_count',  int, 1)])   # Num iter in color
+swarm = np.zeros(swarm_size, dtype=[('position',       		int, 2),    # Position (x,y)
+                                   ('velocity',        		int, 2),    # Velocity (dx,dy)
+                                   ('color',           		float, 3),  # Color (r,g,b)
+                                   ('group_num',	   		int, 1),    # Group
+                                   ('state',   		   		int, 1),    # Is currently tracing edge
+                                   ('blob_num',        		int, 1),    # Number of blob it is tracking. 0=none
+                                   ('reflection_position',  int, 2),    # Position of last reflection bounce
+								   ('in_color_count',  		int, 1)])   # Num iter in color
 
 scale = 10
 particle_size = 25 * scale  # Set particle size
@@ -112,7 +115,7 @@ def is_inside_img_bounds(_x, _y):
 	return not ((_x < 0) or (_x > img_x-1) or (_y < 0) or (_y > img_y-1))
 
 # Check for position bounds and adjust velocity
-def adjust_for_img_bounds(_x, _y, _vx, _vy, particle):
+def update_x_with_v(_x, _y, _vx, _vy, particle):
 	if (_x + _vx < 0):   # check min bounds x
 		_x = 0
 		_vx *= -1
@@ -157,14 +160,57 @@ def update(frame_number):
 
 		print "particle", p_idx
 
+		
+		# Check blob's reflections for max
+		blob_num = particle['blob_num']
+		if (blob_num >= 0):
+			blob = blobs[blob_num]
+			if (blob['num_reflections'] > max_num_reflections):
+				print "\nBlob %d reflection count maxed. resetting particles\n" % blob_num
+				circle = Circle((blob['position'][0], blob['position'][1]), math.sqrt(blob['max_sqr_found']), edgecolor=(.5,.5,.5,.9), facecolor=(.8, .8, .8, .5))
+				ax.add_patch(circle)
+
+				swarm[particle['group_num'] * step : particle['group_num'] * step + step]['blob_num'] = -1   # reset group's blob_num
+				swarm[particle['group_num'] * step : particle['group_num'] * step + step]['state'] = 0   # reset group's state
+		
 		# Check that state is travelling
 		if (particle['state'] == 0):
 
 			if (particle['blob_num'] < 0):
 				# No blob found for group
 
-				# Check if current position is in color
-				if (is_in_color(position_color)):
+				def particle_in_other_blob_radius(x, y):
+					for blob_idx,blob in enumerate(blobs):
+						blob_x = blob['position'][0]
+						blob_y = blob['position'][1]
+						blob_r2 = blob['max_sqr_found']
+
+						d2 = (x - blob_x)**2 + (y - blob_y)**2
+
+						print "particle_in_other_blob_radius: P(%d,%d),  B%d(%d,%d), d2=%.2f" % \
+							(x, y, blob_idx, blob_x, blob_y, d2)
+
+						return d2 < blob_r2   # true if distance^2 < r^2 of blob
+
+				# Check if particle is in another's radius
+				if (particle_in_other_blob_radius(x, y) or not is_in_color(position_color)):
+					# particle is in another blob's radius or is not in color
+
+					print "X(%d, %d), V(%d, %d) : not in color" % (x,y,vx,vy)
+					
+					particle['in_color_count'] = 0   # reset counter
+
+					# Randomly mutate velocity, ensure both not 0
+					while(True):
+						vx = vx if (np.random.rand() > 0.05) else get_rand_velocity(1, 1) 
+						vy = vy if (np.random.rand() > 0.05) else get_rand_velocity(1, 1)
+						if (vx != 0 or vy != 0):   # loop while both == 0
+							break
+					x, y, vx, vy = update_x_with_v(x, y, vx, vy, particle)
+
+				else:
+					# particle is in color
+
 					print "X(%d, %d), V(%d, %d), RED, CC=%d : in red" % (x,y,vx,vy, particle['in_color_count'])
 
 					# Check if travelled far enough into blob
@@ -182,18 +228,11 @@ def update(frame_number):
 						print "\tEntered in blob state"
 					else:
 						particle['in_color_count'] += 1    # increment counter
-				else:
-					print "X(%d, %d), V(%d, %d) : not in color" % (x,y,vx,vy)
-					
-					particle['in_color_count'] = 0   # reset counter
+						x, y, vx, vy = update_x_with_v(x, y, vx, vy, particle)
 
-					# Randomly mutate velocity, ensure both not 0
-					while(True):
-						vx = vx if (np.random.rand() > 0.05) else get_rand_velocity(1, 1) 
-						vy = vy if (np.random.rand() > 0.05) else get_rand_velocity(1, 1)
-						if (vx != 0 or vy != 0):   # loop while both == 0
-							break
 			else:
+				# Group is assigned a blob
+
 				# if travelling and a blob is found for group, head towards it
 				dx = blobs[particle['blob_num']]['position'][0] - x
 				dy = blobs[particle['blob_num']]['position'][1] - y
@@ -205,7 +244,7 @@ def update(frame_number):
 					vx = dx / d * (velocity_range / 2)
 					vy = dy / d * (velocity_range / 2)
 
-			x, y, vx, vy = adjust_for_img_bounds(x, y, vx, vy, particle)
+					x, y, vx, vy = update_x_with_v(x, y, vx, vy, particle)
 
 		# Check that state is searching blob
 		if (particle['state'] == 1):
@@ -233,7 +272,7 @@ def update(frame_number):
 				while (True):   # loop to ensure both components != 0
 					safety -= 1
 					if (safety == 0):
-						print "NEXT VELOCITY LOOP BROKEN"*3
+						print "NEXT VELOCITY LOOP BROKEN"*5
 						break
 
 					if (next_vx > 0):
@@ -256,8 +295,8 @@ def update(frame_number):
 				while (True):   # loop to find nearest position that's in color
 					safety -= 1
 					if (safety == 0):
-						print "NEAREST IN COLOR X LOOP BROKEN"*3
-						breakx
+						print "NEAREST IN COLOR X LOOP BROKEN"*5
+						break
 					print ("\tnearest in color : (%d, %d) : %s" % (vx, vy, is_in_color(tuple(img[y + vy][x + vx]))))
 					if (vx != 0):
 						vx += -1 if vx > 0 else 1
@@ -294,7 +333,7 @@ def update(frame_number):
 			else:
 				print "\tnormal update"
 				particle['in_color_count'] += 1    # increment counter
-				x, y, vx, vy = adjust_for_img_bounds(x, y, vx, vy, particle)
+				x, y, vx, vy = update_x_with_v(x, y, vx, vy, particle)
 
 		# set particle data
 		particle['position'][0] = x
@@ -332,14 +371,24 @@ def onclick(event):
 def onpress(event):
 	global run_anim
 	global interval, min_interval, max_interval
+	global swarm
 	global blobs
 
 	# Start/Stop animation on any key press
 	if (event.key == "x"):
+
 		if (run_anim):
 			run_anim = False
 			animation.event_source.stop()
 
+			# Print Particles
+			print "PARTICLES:"
+			for particle in swarm:
+				print "\tParticle X(x:%d,y:%d), V(x:%d,y:%d), %s, G%d, State:%d, blob:%d, cnt%d" %\
+					(particle['position'][0], particle['position'][1], particle['velocity'][0], particle['velocity'][1], "IN_COLOR" if is_in_color(particle['color']) else "OUT_COLOR",\
+						 particle['group_num'], particle['state'], particle['blob_num'], particle['in_color_count'])
+
+			# Print Blobs
 			print "BLOBS:"
 			for blob in blobs:
 				print "\tBlob (X:%d, Y:%d) max_2r=%.2f,  A=%.2f,  num_refl=%d" \
@@ -358,8 +407,8 @@ def onpress(event):
 		animation.event_source.interval = interval
 
 run_anim = True
-interval = 300
-min_interval = 25
+interval = 50
+min_interval = 200
 max_interval = 500
 iterations = 180
 click_cid = fig.canvas.mpl_connect('button_press_event', onclick)
