@@ -171,8 +171,10 @@ def update(frame_number):
 				circle = Circle((blob['position'][0], blob['position'][1]), math.sqrt(blob['max_sqr_found']), edgecolor=(.5,.5,.5,.9), facecolor=(.8, .8, .8, .5))
 				ax.add_patch(circle)
 
-				swarm[particle['group_num'] * step : particle['group_num'] * step + step]['blob_num'] = -1   # reset group's blob_num
-				swarm[particle['group_num'] * step : particle['group_num'] * step + step]['state'] = 0   # reset group's state
+				# reset group's variables
+				swarm[particle['group_num'] * step : particle['group_num'] * step + step]['blob_num'] = -1
+				swarm[particle['group_num'] * step : particle['group_num'] * step + step]['state'] = 0
+				swarm[particle['group_num'] * step : particle['group_num'] * step + step]['reflection_position'] = (-1, -1)
 		
 		# Check that state is travelling
 		if (particle['state'] == 0):
@@ -244,7 +246,9 @@ def update(frame_number):
 
 				d = math.sqrt(dx**2 + dy**2)
 
-				print "\tdx:%d, dy:%d,  d:%.4f " % (dx, dy, d)
+				print "HEADING TOWARDS BLOB"
+				print "\tx:%d, y:%d,   dx:%d, dy:%d,  d:%.4f " % (x, y, dx, dy, d)
+				print "\tblob_num:%d, blob_x:%d, blob_y:%d" % (particle['blob_num'],blobs[particle['blob_num']]['position'][0],blobs[particle['blob_num']]['position'][1])
 
 				if (d <= min_blob_size and is_in_color(position_color)):
 					particle['state'] = 1
@@ -337,9 +341,11 @@ def update(frame_number):
 				blob_num = particle['blob_num']    # get particle's blob num
 				blobs[blob_num]['num_reflections'] += 1   # increment reflections in blob
 				if (blobs[blob_num]['max_sqr_found'] < r2):   # set max squared radius if found is greater
-					print '\tsetting max area of blob'
+					print '\tsetting max area of blob,'
 					blobs[blob_num]['max_sqr_found'] = r2
 					if (particle['reflection_position'][0] > 0 and particle['reflection_position'][1] > 0):   # ensure position is valid
+						print '\tsetting position of blob P(x:%d, y:%d), Bold(%d, %d), Bnew(%d, %d)' % \
+						(x,y,particle['reflection_position'][0], particle['reflection_position'][0], abs(x + particle['reflection_position'][0]) / 2, particle['reflection_position'][1] / 2)
 						blobs[blob_num]['position'][0] = abs(x + particle['reflection_position'][0]) / 2   # Set blob position as midpoint of particle path
 						blobs[blob_num]['position'][1] = abs(y + particle['reflection_position'][1]) / 2
 
@@ -423,7 +429,7 @@ def onpress(event):
 		animation.event_source.interval = interval
 
 run_anim = True
-interval = 250
+interval = 30
 min_interval = 200
 max_interval = 500
 iterations = 180
@@ -433,6 +439,6 @@ btn_cid = fig.canvas.mpl_connect('key_press_event', onpress)
 plt.grid(True)   # Show grid on axes
 animation = FuncAnimation(fig, update, interval=interval)#, frames=iterations)
 plt.show()   # Show plot
-#animation.save("path1.mp4", fps=20)
+#animation.save("id.mp4", fps=20)
 
 
