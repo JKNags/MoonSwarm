@@ -66,7 +66,8 @@ swarm['position'][:, 1] = np.random.randint(0, img_y, swarm_size)   # Set random
 swarm['velocity'] = get_rand_velocity(swarm_size, 2)   # Set velocity components in px
 #particle['color'] = (1, 0.0784, 0.576)   # pink color
 swarm['color'] = [tuple(img[particle['position'][1]][particle['position'][0]]) for particle in swarm]
-swarm['blob_num'] = -1
+swarm['blob_num'] = -1   # begin invalid
+swarm['reflection_position'] = (-1,-1)   # begin invalid
 
 step = int(float(swarm_size)/num_groups)
 for group_num in range(0, num_groups):
@@ -220,7 +221,7 @@ def update(frame_number):
 
 						# First blob found for group
 						print 'assigning new blob num -', next_blob_num
-						blobs.resize(next_blob_num + 1)   # add new blob to list
+						blobs.resize(next_blob_num + 1, refcheck=False)   # add new blob to list
 						swarm[particle['group_num'] * step : particle['group_num'] * step + step]['blob_num'] = next_blob_num
 						blobs[next_blob_num]['position'] = (x, y)   # set approximate position of blob
 						next_blob_num += 1
@@ -324,12 +325,19 @@ def update(frame_number):
 						(x,y, particle['in_color_count'], approx_blob_area)
 
 				particle['in_color_count'] = 0   # reset counter
-				
+
 				blob_num = particle['blob_num']    # get particle's blob num
 				blobs[blob_num]['num_reflections'] += 1   # increment reflections in blob
 				if (blobs[blob_num]['max_sqr_found'] < r2):   # set max squared radius if found is greater
 					print '\tsetting max area of blob'
 					blobs[blob_num]['max_sqr_found'] = r2
+					if (particle['reflection_position'][0] > 0 and particle['reflection_position'][1] > 0):   # ensure position is valid
+						blobs[blob_num]['position'][0] = abs(x + particle['reflection_position'][0]) / 2   # Set blob position as midpoint of particle path
+						blobs[blob_num]['position'][1] = abs(y + particle['reflection_position'][1]) / 2
+
+				particle['reflection_position'][0] = x   # set reflection position
+				particle['reflection_position'][1] = y
+
 			else:
 				print "\tnormal update"
 				particle['in_color_count'] += 1    # increment counter
@@ -407,7 +415,7 @@ def onpress(event):
 		animation.event_source.interval = interval
 
 run_anim = True
-interval = 50
+interval = 250
 min_interval = 200
 max_interval = 500
 iterations = 180
