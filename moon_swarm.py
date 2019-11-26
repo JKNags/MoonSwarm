@@ -7,8 +7,8 @@ import numpy as np
 import math
 
 # Global Variables
-min_blob_size = 20   # Distance for particle to reflect within blob
-search_color_above = (255, 100, 100)
+min_blob_size = 8   # Distance for particle to reflect within blob
+search_color_above = (255, 80, 80)
 search_color_below = (200, 0, 0)
 max_num_reflections = 50
 
@@ -22,7 +22,7 @@ def is_in_color(color):
 
 # Read Image
 #img = mpimg.imread('grail_gravity_map_moon.jpg')[::-1,:]
-img = mpimg.imread('test/test9.jpg')[::-1,:]#[:,:,:3]
+img = mpimg.imread('test/test7.jpg')[::-1,:]#[:,:,:3]
 
 # Figure
 fig, ax = plt.subplots()
@@ -365,13 +365,17 @@ def update(frame_number):
 				x, y, vx, vy = update_x_with_v(x, y, vx, vy, particle)
 
 		# set particle data
-		particle['position'][0] = x
-		particle['position'][1] = y
-		particle['velocity'][0] = vx
-		particle['velocity'][1] = vy
-		particle['color'] = position_color
-		markers[p_idx] = (3, 0, math.degrees(math.atan2(vy, vx))-90)
-	
+		try:
+			particle['position'][0] = x
+			particle['position'][1] = y
+			particle['velocity'][0] = vx
+			particle['velocity'][1] = vy
+			particle['color'] = position_color
+			markers[p_idx] = (3, 0, math.degrees(math.atan2(vy, vx))-90)
+		except Exception as e:
+			print e
+			pass
+
 	set_markers()   # update rotation of plot markers
 
     # Update the scatter collection
