@@ -7,19 +7,22 @@ import numpy as np
 import math
 
 # Global Variables
-min_blob_size = 30   # Distance for particle to reflect within blob
-search_color = (255, 0, 0)
-color_threshold_r = 200  # Min
-color_threshold_g = 75   # Max
-color_threshold_b = 75   # Max
+min_blob_size = 20   # Distance for particle to reflect within blob
+search_color_above = (255, 100, 100)
+search_color_below = (200, 0, 0)
 max_num_reflections = 50
 
 def is_in_color(color):
-	return color[0] > color_threshold_r and color[1] < color_threshold_g and color[2] < color_threshold_b
+	#return color[0] > color_threshold_r and color[1] < color_threshold_g and color[2] < color_threshold_b
+	
+	is_in = (color[0] >= search_color_below[0] and color[0] <= search_color_above[0]) \
+		and (color[1] >= search_color_below[1] and color[1] <= search_color_above[1]) \
+		and (color[2] >= search_color_below[2] and color[2] <= search_color_above[2])
+	return is_in
 
 # Read Image
-img = mpimg.imread('grail_gravity_map_moon.jpg')[::-1,:]
-#img = mpimg.imread('test/test7.jpg')[::-1,:]#[:,:,:3]
+#img = mpimg.imread('grail_gravity_map_moon.jpg')[::-1,:]
+img = mpimg.imread('test/test9.jpg')[::-1,:]#[:,:,:3]
 
 # Figure
 fig, ax = plt.subplots()
@@ -47,8 +50,8 @@ def get_rand_velocity(n, d):
 	return np.random.choice(a, (n, d))
 
 # Create Swarm
-swarm_size = 50
-num_groups = 10
+swarm_size = 21
+num_groups = 3
 swarm = np.zeros(swarm_size, dtype=[('position',       		int,   2),    # Position (x,y)
                                    ('velocity',        		int,   2),    # Velocity (dx,dy)
                                    ('color',           		float, 3),  # Color (r,g,b)
@@ -176,7 +179,7 @@ def update(frame_number):
 				swarm[particle['group_num'] * step : particle['group_num'] * step + step]['state'] = 0
 				swarm[particle['group_num'] * step : particle['group_num'] * step + step]['reflection_position'] = (-1, -1)
 		
-		# Check that state is travelling
+		# Check that state is searching for blob
 		if (particle['state'] == 0):
 
 			if (particle['blob_num'] < 0):
@@ -416,6 +419,7 @@ def onpress(event):
 
 			# Print Blobs
 			print "BLOBS:"
+			blobs.sort(order='max_r2_found')   # sort ascending
 			for blob in blobs:
 				print "\tBlob (X:%d, Y:%d) max_2r=%.2f,  A=%.2f,  num_refl=%d" \
 					% (blob['position'][0], blob['position'][1], blob['max_r2_found'], calculate_A_circle_r2(blob['max_r2_found']), blob['num_reflections'])
