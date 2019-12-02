@@ -7,10 +7,16 @@ import numpy as np
 import math
 
 # Global Variables
-min_blob_size = 8   # Distance for particle to reflect within blob
-search_color_above = (255, 80, 80)
+min_blob_size = 16   # Distance for particle to reflect within blob
+search_color_above = (255, 100, 100)
 search_color_below = (200, 0, 0)
-max_num_reflections = 50
+max_num_reflections = 30
+swarm_size = 40
+num_groups = 10
+img_file_name = 'grail_gravity_map_moon.jpg'
+velocity_min = -7
+velocity_max = 7
+max_num_frames = 1000
 
 def is_in_color(color):
 	#return color[0] > color_threshold_r and color[1] < color_threshold_g and color[2] < color_threshold_b
@@ -21,8 +27,8 @@ def is_in_color(color):
 	return is_in
 
 # Read Image
-#img = mpimg.imread('grail_gravity_map_moon.jpg')[::-1,:]
-img = mpimg.imread('test/test7.jpg')[::-1,:]#[:,:,:3]
+img = mpimg.imread(img_file_name)[::-1,:]
+#img = mpimg.imread('test/test7.jpg')[::-1,:]#[:,:,:3]
 
 # Figure
 fig, ax = plt.subplots()
@@ -42,16 +48,12 @@ states = {0:"Travelling", 1:"Measuring blob"}   # states a particle can be in
 
 # return random int
 # n - item count, d - dimentions per item
-velocity_min = -7
-velocity_max = 7
 velocity_range = velocity_max - velocity_min
 def get_rand_velocity(n, d):
 	a = [x for x in range(velocity_min, velocity_max+1)]
 	return np.random.choice(a, (n, d))
 
 # Create Swarm
-swarm_size = 21
-num_groups = 3
 swarm = np.zeros(swarm_size, dtype=[('position',       		int,   2),    # Position (x,y)
                                    ('velocity',        		int,   2),    # Velocity (dx,dy)
                                    ('color',           		float, 3),  # Color (r,g,b)
@@ -84,17 +86,6 @@ blobs = np.empty(0, dtype=[('max_r2_found',    int, 1),
 						   ('num_reflections',  int, 1),
 						   ('position',			int, 2)])
 
-"""
-THIS IS FOR TESTING, REMOVE LATER
-"""
-#swarm['position'][:,0] = 1 #180 #182
-#swarm['position'][:,1] = 1 #88 #386
-#swarm['velocity'] = (1,1)
-"""
-THIS IS FOR TESTING, REMOVE LATER
-"""
-
-
 # Create initial scatter plot
 scatter_plot = ax.scatter(swarm['position'][:, 0], swarm['position'][:, 1],
             c=(swarm['color'] / 255.0), s=particle_size, lw=0.5, 
@@ -117,6 +108,26 @@ set_markers() # set plot markers as triangles with rotation wrt velocity
 # Return true if inside, false if outside
 def is_inside_img_bounds(_x, _y):
 	return not ((_x < 0) or (_x > img_x-1) or (_y < 0) or (_y > img_y-1))
+
+# Print particles and blobs
+def print_data():
+	# Print Frame Number
+	print "Frame Number:", global_frame_number
+
+	# Print Particles
+	print "PARTICLES:"
+	for particle in swarm:
+		print "\tParticle X(x:%d,y:%d), V(x:%d,y:%d), %s, G%d, State:%d, blob:%d, cnt%d" %\
+			(particle['position'][0], particle['position'][1], particle['velocity'][0], particle['velocity'][1], "IN_COLOR" if is_in_color(particle['color']) else "OUT_COLOR",\
+				 particle['group_num'], particle['state'], particle['blob_num'], particle['in_color_count'])
+
+	# Print Blobs
+	print "BLOBS:"
+	blobs.sort(order='max_r2_found')   # sort ascending,  #TODO: THIS MESSES UP PARTICLE's blob_num
+	for blob in blobs:
+		print "\tBlob (X:%d, Y:%d) max_2r=%.2f,  A=%.2f,  num_refl=%d" \
+			% (blob['position'][0], blob['position'][1], blob['max_r2_found'], calculate_A_circle_r2(blob['max_r2_found']), blob['num_reflections'])
+
 
 # Check for position bounds and adjust velocity
 def update_x_with_v(_x, _y, _vx, _vy, particle):
@@ -148,7 +159,10 @@ def calculate_A_circle_r2(r2):
 	return 3.1415927 * r2
 
 # Called every animation frame
+global_frame_number = 0
 def update(frame_number):
+	global global_frame_number
+	global_frame_number = frame_number
 	#print "Frame %d" % frame_number
 	global next_blob_num
 
@@ -382,9 +396,11 @@ def update(frame_number):
 	scatter_plot.set_facecolor(swarm['color'] / 255.0)
 	scatter_plot.set_offsets(swarm['position'])
 	
-
-	#if (frame_number == 20):
-	#	animation.event_source.stop()
+	global run_anim
+	if (frame_number == max_num_frames):
+		run_anim = False
+		print_data()
+		animation.event_source.stop()
 
 # Mouse click event
 def onclick(event):
@@ -406,6 +422,7 @@ def onpress(event):
 	global interval, min_interval, max_interval
 	global swarm
 	global blobs
+	global global_frame_number
 
 	# Start/Stop animation on any key press
 	if (event.key == "x"):
@@ -414,19 +431,7 @@ def onpress(event):
 			run_anim = False
 			animation.event_source.stop()
 
-			# Print Particles
-			print "PARTICLES:"
-			for particle in swarm:
-				print "\tParticle X(x:%d,y:%d), V(x:%d,y:%d), %s, G%d, State:%d, blob:%d, cnt%d" %\
-					(particle['position'][0], particle['position'][1], particle['velocity'][0], particle['velocity'][1], "IN_COLOR" if is_in_color(particle['color']) else "OUT_COLOR",\
-						 particle['group_num'], particle['state'], particle['blob_num'], particle['in_color_count'])
-
-			# Print Blobs
-			print "BLOBS:"
-			blobs.sort(order='max_r2_found')   # sort ascending
-			for blob in blobs:
-				print "\tBlob (X:%d, Y:%d) max_2r=%.2f,  A=%.2f,  num_refl=%d" \
-					% (blob['position'][0], blob['position'][1], blob['max_r2_found'], calculate_A_circle_r2(blob['max_r2_found']), blob['num_reflections'])
+			print_data()
 		else:
 			run_anim = True
 			animation.event_source.start()
@@ -441,7 +446,7 @@ def onpress(event):
 		animation.event_source.interval = interval
 
 run_anim = True
-interval = 10
+interval = 5
 min_interval = 200
 max_interval = 500
 iterations = 180
