@@ -82,9 +82,43 @@ for group_num in range(0, num_groups):
 
 # Blob data
 next_blob_num = 0   # for use when a new blob is discovered
-blobs = np.empty(0, dtype=[('max_r2_found',    int, 1),
+blobs = np.empty(0, dtype=[('max_r2_found',     int, 1),
 						   ('num_reflections',  int, 1),
 						   ('position',			int, 2)])
+
+# Manually selected blobs for accuracy testing
+actual_blobs = np.empty(12, dtype=[('r2',    int, 1),   # for accuracy in testing
+						   ('position',		 int, 2)])
+
+if (img_file_name == 'grail_gravity_map_moon.jpg'):
+	actual_blobs[0]['position'] = (69, 482)
+	actual_blobs[0]['r2'] = 1180.0
+	actual_blobs[1]['position'] = (303, 643)
+	actual_blobs[1]['r2'] = 490.0
+	actual_blobs[2]['position'] = (215, 446)
+	actual_blobs[2]['r2'] = 590.0
+	actual_blobs[3]['position'] = (123, 324)
+	actual_blobs[3]['r2'] = 370.0
+	actual_blobs[4]['position'] = (319, 376)
+	actual_blobs[4]['r2'] = 270.0
+	actual_blobs[5]['position'] = (540, 485)
+	actual_blobs[5]['r2'] = 70.0
+	actual_blobs[6]['position'] = (977, 313)
+	actual_blobs[6]['r2'] = 235.0
+	actual_blobs[7]['position'] = (973, 172)
+	actual_blobs[7]['r2'] = 395.0
+	actual_blobs[8]['position'] = (1155, 136)
+	actual_blobs[8]['r2'] = 125.0
+	actual_blobs[9]['position'] = (1177, 293)
+	actual_blobs[9]['r2'] = 390.0
+	actual_blobs[10]['position'] = (1254, 532)
+	actual_blobs[10]['r2'] = 2400.0
+	actual_blobs[11]['position'] = (111, 626)
+	actual_blobs[11]['r2'] = 265.0
+
+for blob in actual_blobs:
+	circle = Circle((blob['position'][0], blob['position'][1]), math.sqrt(blob['r2']), edgecolor=(1,1,1,1), facecolor=(.8, .5, .5, .2))
+	ax.add_patch(circle)
 
 # Create initial scatter plot
 scatter_plot = ax.scatter(swarm['position'][:, 0], swarm['position'][:, 1],
@@ -124,9 +158,36 @@ def print_data():
 	# Print Blobs
 	print "BLOBS:"
 	blobs.sort(order='max_r2_found')   # sort ascending,  #TODO: THIS MESSES UP PARTICLE's blob_num
+	
 	for blob in blobs:
-		print "\tBlob (X:%d, Y:%d) max_2r=%.2f,  A=%.2f,  num_refl=%d" \
-			% (blob['position'][0], blob['position'][1], blob['max_r2_found'], calculate_A_circle_r2(blob['max_r2_found']), blob['num_reflections'])
+		blob_area = calculate_A_circle_r2(blob['max_r2_found'])
+
+		min_dist = img_x + img_y   # arbitrary max	
+		closest_actual_blob = None
+
+		# find closest actual blob for accuracy
+		for actual_blob in actual_blobs:
+			dist = math.sqrt((actual_blob['position'][0] - blob['position'][0])**2 + (actual_blob['position'][1] - blob['position'][1])**2)
+			if (dist < min_dist):
+				min_dist = dist
+				closest_actual_blob = actual_blob
+		
+		# build actual blob string
+		closest_actual_blob_info = ""
+		if (closest_actual_blob is not None):
+			closest_actual_blob_area = calculate_A_circle_r2(closest_actual_blob['r2'])
+
+			position_accuracy_x = abs(closest_actual_blob['position'][0] - blob['position'][0]) / float(closest_actual_blob['position'][0])
+			position_accuracy_y = abs(closest_actual_blob['position'][1] - blob['position'][1]) / float(closest_actual_blob['position'][1])
+			position_accuracy = (1.0 - position_accuracy_x) * (1.0 - position_accuracy_y) * 100   # combine position accuracy
+			area_accuracy = 100 - (abs(closest_actual_blob_area - blob_area) / closest_actual_blob_area * 100)
+			closest_actual_blob_info = "ClosestActualBlob: P(%d,%d),A=%.2f,  X_accuracy=%.4f%%, A_accuracy=%.4f%%" % (closest_actual_blob['position'][0],closest_actual_blob['position'][1], \
+									closest_actual_blob_area, position_accuracy, area_accuracy)
+
+		# actually print info
+		print "\tBlob (X:%d, Y:%d) max_r2=%.2f,  A=%.2f,  num_refl=%d.  %s" \
+			% (blob['position'][0], blob['position'][1], blob['max_r2_found'], blob_area, blob['num_reflections'], \
+				closest_actual_blob_info )
 
 
 # Check for position bounds and adjust velocity
@@ -403,15 +464,21 @@ def update(frame_number):
 		animation.event_source.stop()
 
 # Mouse click event
+last_click_position = (0, 0)
 def onclick(event):
+	global last_click_position
+
 	try:
 		# Print image data at click location
 		if (event.ydata is not None and event.xdata is not None):
 			x = int(round(event.xdata))
 			y = int(round(event.ydata))
 			color = tuple(img[y][x])
-			print "click at (%d, %d) : %s : %s" \
-				% (x,y, color, "IN_COLOR" if is_in_color(color) else "NOT_IN_COLOR")
+			print "click at P(%d, %d) : C%s : %s.   r2 from P(%d, %d) = %.4f" \
+				% (x,y, color, "IN_COLOR" if is_in_color(color) else "NOT_IN_COLOR", \
+					last_click_position[0], last_click_position[1],	((x-last_click_position[0])**2+(y-last_click_position[1])**2))
+			
+			last_click_position = (x, y)
 	except Exception as e:
 		print e
 		pass
@@ -423,6 +490,7 @@ def onpress(event):
 	global swarm
 	global blobs
 	global global_frame_number
+	
 
 	# Start/Stop animation on any key press
 	if (event.key == "x"):
