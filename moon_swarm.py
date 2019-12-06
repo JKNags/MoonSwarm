@@ -7,16 +7,17 @@ import numpy as np
 import math
 
 # Global Variables
-min_blob_size = 16   # Distance for particle to reflect within blob
+min_blob_size = 25   # Distance for particle to reflect within blob
 search_color_above = (255, 100, 100)
 search_color_below = (200, 0, 0)
-max_num_reflections = 30
-swarm_size = 40
-num_groups = 10
+max_num_reflections = 40
+swarm_size = 55
+num_groups = 11
 img_file_name = 'grail_gravity_map_moon.jpg'
 velocity_min = -7
 velocity_max = 7
-max_num_frames = 1000
+max_num_frames = 800
+use_position_colors = False
 
 def is_in_color(color):
 	#return color[0] > color_threshold_r and color[1] < color_threshold_g and color[2] < color_threshold_b
@@ -95,10 +96,10 @@ if (img_file_name == 'grail_gravity_map_moon.jpg'):
 	actual_blobs[0]['r2'] = 1180.0
 	actual_blobs[1]['position'] = (303, 643)
 	actual_blobs[1]['r2'] = 490.0
-	actual_blobs[2]['position'] = (215, 446)
-	actual_blobs[2]['r2'] = 590.0
-	actual_blobs[3]['position'] = (123, 324)
-	actual_blobs[3]['r2'] = 370.0
+	actual_blobs[2]['position'] = (215, 455)
+	actual_blobs[2]['r2'] = 610.0
+	actual_blobs[3]['position'] = (123, 327)
+	actual_blobs[3]['r2'] = 400.0
 	actual_blobs[4]['position'] = (319, 376)
 	actual_blobs[4]['r2'] = 270.0
 	actual_blobs[5]['position'] = (540, 485)
@@ -122,7 +123,7 @@ for blob in actual_blobs:
 
 # Create initial scatter plot
 scatter_plot = ax.scatter(swarm['position'][:, 0], swarm['position'][:, 1],
-            c=(swarm['color'] / 255.0), s=particle_size, lw=0.5, 
+            c=(swarm['color'] / 255.0 if use_position_colors else (1,1,1)), s=particle_size, lw=0.5, 
             edgecolors=edge_color, facecolors='none')
 
 # Update plot for markers to show velocity
@@ -143,20 +144,26 @@ set_markers() # set plot markers as triangles with rotation wrt velocity
 def is_inside_img_bounds(_x, _y):
 	return not ((_x < 0) or (_x > img_x-1) or (_y < 0) or (_y > img_y-1))
 
+# Return accuracy of measurement
+def accuracy(actual, observed):
+	if (observed) == 0:
+		return 0.0
+	return abs(observed - actual) / float(observed)
+
 # Print particles and blobs
 def print_data():
 	# Print Frame Number
 	print "Frame Number:", global_frame_number
 
-	# Print Particles
+	# Print Particles #######################################################
 	print "PARTICLES:"
 	for particle in swarm:
 		print "\tParticle X(x:%d,y:%d), V(x:%d,y:%d), %s, G%d, State:%d, blob:%d, cnt%d" %\
 			(particle['position'][0], particle['position'][1], particle['velocity'][0], particle['velocity'][1], "IN_COLOR" if is_in_color(particle['color']) else "OUT_COLOR",\
 				 particle['group_num'], particle['state'], particle['blob_num'], particle['in_color_count'])
 
-	# Print Blobs
-	print "BLOBS:"
+	# Print Blobs ###########################################################
+	print "BLOBS (%d):" % (len(blobs))
 	blobs.sort(order='max_r2_found')   # sort ascending,  #TODO: THIS MESSES UP PARTICLE's blob_num
 	
 	for blob in blobs:
@@ -177,19 +184,53 @@ def print_data():
 		if (closest_actual_blob is not None):
 			closest_actual_blob_area = calculate_A_circle_r2(closest_actual_blob['r2'])
 
-			position_accuracy_x = abs(closest_actual_blob['position'][0] - blob['position'][0]) / float(closest_actual_blob['position'][0])
-			position_accuracy_y = abs(closest_actual_blob['position'][1] - blob['position'][1]) / float(closest_actual_blob['position'][1])
+			position_accuracy_x = accuracy(closest_actual_blob['position'][0], blob['position'][0])
+			position_accuracy_y = accuracy(closest_actual_blob['position'][1], blob['position'][1])
 			position_accuracy = (1.0 - position_accuracy_x) * (1.0 - position_accuracy_y) * 100   # combine position accuracy
-			area_accuracy = 100 - (abs(closest_actual_blob_area - blob_area) / closest_actual_blob_area * 100)
+			area_accuracy = 100 - accuracy(closest_actual_blob['r2'], blob['max_r2_found']) #100 - accuracy(closest_actual_blob_area, blob_area)
 			closest_actual_blob_info = "ClosestActualBlob: P(%d,%d),A=%.2f,  X_accuracy=%.4f%%, A_accuracy=%.4f%%" % (closest_actual_blob['position'][0],closest_actual_blob['position'][1], \
 									closest_actual_blob_area, position_accuracy, area_accuracy)
 
 		# actually print info
-		print "\tBlob (X:%d, Y:%d) max_r2=%.2f,  A=%.2f,  num_refl=%d.  %s" \
-			% (blob['position'][0], blob['position'][1], blob['max_r2_found'], blob_area, blob['num_reflections'], \
-				closest_actual_blob_info )
+		print "\tBlob P(X:%d, Y:%d) max_r2=%.2f,  A=%.2f,  num_refl=%d.  %s" \
+			% (blob['position'][0], blob['position'][1], blob['max_r2_found'], blob_area, blob['num_reflections'], closest_actual_blob_info )
 
+	# Print Actual Blobs ####################################################
+	print "ACTUAL BLOBS (%d):" % (len(actual_blobs))
+	position_accuracy_sum = 0
+	area_accuracy_sum = 0
+	for actual_blob in actual_blobs:
+		actual_blob_area = calculate_A_circle_r2(actual_blob['r2'])
 
+		min_dist = img_x + img_y   # arbitrary max	
+		closest_blob = None
+
+		# find closest actual blob for accuracy
+		for blob in blobs:
+			dist = math.sqrt((actual_blob['position'][0] - blob['position'][0])**2 + (actual_blob['position'][1] - blob['position'][1])**2)
+			if (dist < min_dist):
+				min_dist = dist
+				closest_blob = blob
+		
+		closest_blob_info = ""
+		if (closest_blob is not None):
+			closest_blob_area = calculate_A_circle_r2(closest_blob['max_r2_found'])
+
+			position_accuracy_x = accuracy(actual_blob['position'][0], closest_blob['position'][0])
+			position_accuracy_y = accuracy(actual_blob['position'][1], closest_blob['position'][1])
+			position_accuracy = (1.0 - position_accuracy_x) * (1.0 - position_accuracy_y) * 100   # combine position accuracy
+			area_accuracy = 100 - (accuracy(actual_blob_area, closest_blob_area) * 100)
+			closest_blob_info = "ClosestBlob: P(%d,%d),A=%.2f,  X_accuracy=%.4f%%, A_accuracy=%.4f%%" % (closest_actual_blob['position'][0],closest_actual_blob['position'][1], \
+									closest_blob_area, position_accuracy, area_accuracy)
+			
+			position_accuracy_sum += position_accuracy
+			area_accuracy_sum += area_accuracy
+
+		# actually print info
+		print "\tActualBlob P(%d, %d) r2=%.2f, A=%.2f. %s" \
+			% (actual_blob['position'][0], actual_blob['position'][1], actual_blob['r2'], blob_area, closest_blob_info )		
+	print "\tAvg Accuacy: Position=%.4f,  Area=%.4f" % (position_accuracy_sum / len(actual_blobs), area_accuracy_sum / len(actual_blobs))
+	
 # Check for position bounds and adjust velocity
 def update_x_with_v(_x, _y, _vx, _vy, particle):
 	if (_x + _vx < 0):   # check min bounds x
@@ -286,8 +327,8 @@ def update(frame_number):
 
 					# Randomly mutate velocity, ensure both not 0
 					while(True):
-						vx = vx if (np.random.rand() > 0.05) else get_rand_velocity(1, 1) 
-						vy = vy if (np.random.rand() > 0.05) else get_rand_velocity(1, 1)
+						vx = vx if (np.random.rand() > 0.02) else get_rand_velocity(1, 1) 
+						vy = vy if (np.random.rand() > 0.02) else get_rand_velocity(1, 1)
 						if (vx != 0 or vy != 0):   # loop while both == 0
 							break
 					x, y, vx, vy = update_x_with_v(x, y, vx, vy, particle)
@@ -334,8 +375,9 @@ def update(frame_number):
 					#print "\tSetting state to 1: %.4f <= %.4f" % (d , min_blob_size) 
 				else:
 					# particle still travelling towards blob
-					vx = dx / d * (velocity_range / 2)
-					vy = dy / d * (velocity_range / 2)
+					if (d != 0):   # TODO: not sure if this fixes the d==0 issue
+						vx = dx / d * (velocity_range / 2)
+						vy = dy / d * (velocity_range / 2)
 
 					x, y, vx, vy = update_x_with_v(x, y, vx, vy, particle)
 
@@ -454,7 +496,8 @@ def update(frame_number):
 	set_markers()   # update rotation of plot markers
 
     # Update the scatter collection
-	scatter_plot.set_facecolor(swarm['color'] / 255.0)
+	if (use_position_colors):
+		scatter_plot.set_facecolor(swarm['color'] / 255.0)
 	scatter_plot.set_offsets(swarm['position'])
 	
 	global run_anim
@@ -514,7 +557,7 @@ def onpress(event):
 		animation.event_source.interval = interval
 
 run_anim = True
-interval = 5
+interval = 1
 min_interval = 200
 max_interval = 500
 iterations = 180
