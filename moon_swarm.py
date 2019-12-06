@@ -5,19 +5,21 @@ from matplotlib.patches import Circle
 from matplotlib.animation import FuncAnimation
 import numpy as np
 import math
+import time
 
 # Global Variables
 min_blob_size = 25   # Distance for particle to reflect within blob
-search_color_above = (255, 100, 100)
+search_color_above = (255, 100, 100)   # Target color range
 search_color_below = (200, 0, 0)
-max_num_reflections = 40
+max_num_reflections = 40   # number of times particles reflect inside region for size estimation
 swarm_size = 55
 num_groups = 11
 img_file_name = 'grail_gravity_map_moon.jpg'
-velocity_min = -7
+velocity_min = -7   # Range of velocities particles can randomly take
 velocity_max = 7
-max_num_frames = 800
-use_position_colors = False
+max_num_frames = 800   # End animation at this frame
+use_position_colors = False   # Change particle color based on position or just white
+show_anim = True   # Show animation running or just print results
 
 def is_in_color(color):
 	#return color[0] > color_threshold_r and color[1] < color_threshold_g and color[2] < color_threshold_b
@@ -534,27 +536,27 @@ def onpress(event):
 	global blobs
 	global global_frame_number
 	
-
 	# Start/Stop animation on any key press
-	if (event.key == "x"):
+	if (show_anim):
+		if (event.key == "x"):
 
-		if (run_anim):
-			run_anim = False
-			animation.event_source.stop()
+			if (run_anim):
+				run_anim = False
+				animation.event_source.stop()
 
-			print_data()
-		else:
-			run_anim = True
-			animation.event_source.start()
+				print_data()
+			else:
+				run_anim = True
+				animation.event_source.start()
 
-	# Change animation interval
-	# NOT WORKING
-	if (event.key == "-" and interval > min_interval):
-		interval -= 25
-		animation.event_source.interval = interval
-	if (event.key == "=" and interval < max_interval):
-		interval += 25
-		animation.event_source.interval = interval
+		# Change animation interval
+		# NOT WORKING
+		if (event.key == "-" and interval > min_interval):
+			interval -= 25
+			animation.event_source.interval = interval
+		if (event.key == "=" and interval < max_interval):
+			interval += 25
+			animation.event_source.interval = interval
 
 run_anim = True
 interval = 1
@@ -565,7 +567,20 @@ click_cid = fig.canvas.mpl_connect('button_press_event', onclick)
 btn_cid = fig.canvas.mpl_connect('key_press_event', onpress)
 
 plt.grid(True)   # Show grid on axes
-animation = FuncAnimation(fig, update, interval=interval)#, frames=iterations)
+
+if (show_anim):
+	animation = FuncAnimation(fig, update, interval=interval)#, frames=iterations)
+else:
+	start_time = time.time()
+
+	for frame_number in range(max_num_frames):
+		update(frame_number)
+	print_data()
+
+	stop_time = time.time()
+
+	print "Runtime for %d frames: %.2fs" % (max_num_frames, stop_time - start_time)
+
 plt.show()   # Show plot
 #animation.save("id.mp4", fps=20)
 
