@@ -11,15 +11,15 @@ import time
 min_blob_size = 25   # Distance for particle to reflect within blob
 search_color_above = (255, 100, 100)   # Target color range
 search_color_below = (200, 0, 0)
-max_num_reflections = 40   # number of times particles reflect inside region for size estimation
-swarm_size = 55
-num_groups = 11
+max_num_reflections = 50   # number of times particles reflect inside region for size estimation
+swarm_size = 50
+num_groups = 10
 img_file_name = 'grail_gravity_map_moon.jpg'
 velocity_min = -7   # Range of velocities particles can randomly take
 velocity_max = 7
-max_num_frames = 800   # End animation at this frame
+max_num_frames = 750   # End animation at this frame
 use_position_colors = False   # Change particle color based on position or just white
-show_anim = True   # Show animation running or just print results
+show_anim = False   # Show animation running or just print results
 
 def is_in_color(color):
 	#return color[0] > color_threshold_r and color[1] < color_threshold_g and color[2] < color_threshold_b
@@ -52,9 +52,17 @@ states = {0:"Travelling", 1:"Measuring blob"}   # states a particle can be in
 # return random int
 # n - item count, d - dimentions per item
 velocity_range = velocity_max - velocity_min
+velocity_choices = [x for x in range(velocity_min, velocity_max+1)]
 def get_rand_velocity(n, d):
-	a = [x for x in range(velocity_min, velocity_max+1)]
-	return np.random.choice(a, (n, d))
+	return np.random.choice(velocity_choices, (n, d))
+
+# These arrays are used to choose random velocity in reverse direction
+#pos_range = [v for v in range(0, velocity_max+1)]
+#neg_range = [v for v in range(velocity_min, 1)]
+#all_range = np.union1d(pos_range,neg_range)
+all_range = [v for v in range(velocity_min, velocity_max+1)]
+pos_range = all_range[len(all_range)/2:]
+neg_range = all_range[0:len(all_range)/2+1]
 
 # Create Swarm
 swarm = np.zeros(swarm_size, dtype=[('position',       		int,   2),    # Position (x,y)
@@ -85,12 +93,12 @@ for group_num in range(0, num_groups):
 
 # Blob data
 next_blob_num = 0   # for use when a new blob is discovered
-blobs = np.empty(0, dtype=[('max_r2_found',     int, 1),
+blobs = np.empty(0, dtype=[('max_r2_found',     float, 1),
 						   ('num_reflections',  int, 1),
 						   ('position',			int, 2)])
 
 # Manually selected blobs for accuracy testing
-actual_blobs = np.empty(12, dtype=[('r2',    int, 1),   # for accuracy in testing
+actual_blobs = np.empty(12, dtype=[('r2',    float, 1),   # for accuracy in testing
 						   ('position',		 int, 2)])
 
 if (img_file_name == 'grail_gravity_map_moon.jpg'):
@@ -200,7 +208,9 @@ def print_data():
 	# Print Actual Blobs ####################################################
 	print "ACTUAL BLOBS (%d):" % (len(actual_blobs))
 	position_accuracy_sum = 0
+	position_accuracy_max = 0
 	area_accuracy_sum = 0
+	area_accuracy_max = 0
 	for actual_blob in actual_blobs:
 		actual_blob_area = calculate_A_circle_r2(actual_blob['r2'])
 
@@ -222,16 +232,23 @@ def print_data():
 			position_accuracy_y = accuracy(actual_blob['position'][1], closest_blob['position'][1])
 			position_accuracy = (1.0 - position_accuracy_x) * (1.0 - position_accuracy_y) * 100   # combine position accuracy
 			area_accuracy = 100 - (accuracy(actual_blob_area, closest_blob_area) * 100)
-			closest_blob_info = "ClosestBlob: P(%d,%d),A=%.2f,  X_accuracy=%.4f%%, A_accuracy=%.4f%%" % (closest_actual_blob['position'][0],closest_actual_blob['position'][1], \
+			closest_blob_info = "ClosestBlob: P(%d,%d),A=%.2f,  X_accuracy=%.4f%%, A_accuracy=%.4f%%" % (closest_blob['position'][0],closest_blob['position'][1], \
 									closest_blob_area, position_accuracy, area_accuracy)
 			
 			position_accuracy_sum += position_accuracy
 			area_accuracy_sum += area_accuracy
+			if (position_accuracy > position_accuracy_max):
+				position_accuracy_max = position_accuracy
+			if (area_accuracy > area_accuracy_max):
+				area_accuracy_max = area_accuracy
 
 		# actually print info
 		print "\tActualBlob P(%d, %d) r2=%.2f, A=%.2f. %s" \
 			% (actual_blob['position'][0], actual_blob['position'][1], actual_blob['r2'], blob_area, closest_blob_info )		
-	print "\tAvg Accuacy: Position=%.4f,  Area=%.4f" % (position_accuracy_sum / len(actual_blobs), area_accuracy_sum / len(actual_blobs))
+	print "\tMax Accuracy: X=%.4f, A=%.4f. Avg Accuracy: X=%.4f,  A=%.4f" \
+		% (position_accuracy_max, area_accuracy_max, position_accuracy_sum / len(actual_blobs), area_accuracy_sum / len(actual_blobs))
+	print "\t%.4f\t%.4f\t%.4f\t%.4f" \
+		% (position_accuracy_max, area_accuracy_max, position_accuracy_sum / len(actual_blobs), area_accuracy_sum / len(actual_blobs))
 	
 # Check for position bounds and adjust velocity
 def update_x_with_v(_x, _y, _vx, _vy, particle):
@@ -310,7 +327,7 @@ def update(frame_number):
 						blob_r2 = blob['max_r2_found']
 
 						d2 = (x - blob_x)**2 + (y - blob_y)**2
-						r2 = d2 / 4
+						r2 = d2 / 4.0
 
 						#print "particle_in_other_blob_radius: P(%d,%d),  B%d(%d,%d), blob_r2=%.4f, r2=%.2f" % \
 						#	(x, y, blob_idx, blob_x, blob_y, blob_r2, r2)
@@ -397,14 +414,7 @@ def update(frame_number):
 				next_vx = vx * -1   # store reversed velocity
 				next_vy = vy * -1   # store reversed velocity
 
-				# Slightly change velocity
-				#pos_range = [v for v in range(0, velocity_max+1)]
-				#neg_range = [v for v in range(velocity_min, 1)]
-				#all_range = np.union1d(pos_range,neg_range)
-				all_range = [v for v in range(velocity_min, velocity_max+1)]
-				pos_range = all_range[len(all_range)/2:]
-				neg_range = all_range[0:len(all_range)/2+1]
-
+				# Choose random velocity in opposite direction
 				safety = 40
 				while (True):   # loop to ensure both components != 0
 					safety -= 1
@@ -428,6 +438,7 @@ def update(frame_number):
 					if (next_vx != 0 or next_vy != 0):  # redraw if both == 0
 						break
 
+				# Modify velocity to just place position at region boundary
 				safety = 40
 				while (True):   # loop to find nearest position that's in color
 					safety -= 1
@@ -454,7 +465,7 @@ def update(frame_number):
 				vy = next_vy
 
 				c2 = a**2 + b**2   # calculate Euclidean c^2,  where c^2 / 4 = r^2 
-				r2 = c2 / 4        #   this code is attemptingt to avoid square roots
+				r2 = c2 / 4.0        #   this code is attemptingt to avoid square roots
 				approx_blob_area = calculate_A_circle_r2(r2)
 
 				#print "\tflipped V, setting x=%d,y=%d, COUNT=%d, A=%.2f" % \
