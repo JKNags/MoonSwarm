@@ -8,10 +8,10 @@ import math
 import time
 
 # Global Variables
-min_blob_size = 25   # Distance for particle to reflect within blob
+min_blob_size = 20   # Distance for particle to reflect within blob
 search_color_above = (255, 100, 100)   # Target color range
 search_color_below = (200, 0, 0)
-max_num_reflections = 50   # number of times particles reflect inside region for size estimation
+max_num_reflections = 30   # number of times particles reflect inside region for size estimation
 swarm_size = 50
 num_groups = 10
 img_file_name = 'grail_gravity_map_moon.jpg'
@@ -19,7 +19,7 @@ velocity_min = -7   # Range of velocities particles can randomly take
 velocity_max = 7
 max_num_frames = 750   # End animation at this frame
 use_position_colors = False   # Change particle color based on position or just white
-show_anim = False   # Show animation running or just print results
+show_anim = True   # Show animation running or just print results
 
 def is_in_color(color):
 	#return color[0] > color_threshold_r and color[1] < color_threshold_g and color[2] < color_threshold_b
@@ -74,7 +74,7 @@ swarm = np.zeros(swarm_size, dtype=[('position',       		int,   2),    # Positio
                                    ('reflection_position',  int,   2),    # Position of last reflection bounce
 								   ('in_color_count',  		int,   1)])   # Num iter in color
 
-scale = 10
+scale = 6
 particle_size = 25 * scale  # Set particle size
 edge_color = (0, 0, 0, 1)   # Set global outline color
 swarm['position'][:, 0] = np.random.randint(0, img_x, swarm_size)   # Set random Y position in px
@@ -98,10 +98,10 @@ blobs = np.empty(0, dtype=[('max_r2_found',     float, 1),
 						   ('position',			int, 2)])
 
 # Manually selected blobs for accuracy testing
-actual_blobs = np.empty(12, dtype=[('r2',    float, 1),   # for accuracy in testing
-						   ('position',		 int, 2)])
-
+actual_blobs = []
 if (img_file_name == 'grail_gravity_map_moon.jpg'):
+	actual_blobs = np.empty(12, dtype=[('r2', float, 1),   # for accuracy in testing
+						    		   ('position', int, 2)])
 	actual_blobs[0]['position'] = (69, 482)
 	actual_blobs[0]['r2'] = 1180.0
 	actual_blobs[1]['position'] = (303, 643)
@@ -127,9 +127,9 @@ if (img_file_name == 'grail_gravity_map_moon.jpg'):
 	actual_blobs[11]['position'] = (111, 626)
 	actual_blobs[11]['r2'] = 265.0
 
-for blob in actual_blobs:
-	circle = Circle((blob['position'][0], blob['position'][1]), math.sqrt(blob['r2']), edgecolor=(1,1,1,1), facecolor=(.8, .5, .5, .2))
-	ax.add_patch(circle)
+	for blob in actual_blobs:
+		circle = Circle((blob['position'][0], blob['position'][1]), math.sqrt(blob['r2']), edgecolor=(1,1,1,1), facecolor=(.8, .5, .5, .2))
+		ax.add_patch(circle)
 
 # Create initial scatter plot
 scatter_plot = ax.scatter(swarm['position'][:, 0], swarm['position'][:, 1],
@@ -197,7 +197,7 @@ def print_data():
 			position_accuracy_x = accuracy(closest_actual_blob['position'][0], blob['position'][0])
 			position_accuracy_y = accuracy(closest_actual_blob['position'][1], blob['position'][1])
 			position_accuracy = (1.0 - position_accuracy_x) * (1.0 - position_accuracy_y) * 100   # combine position accuracy
-			area_accuracy = 100 - accuracy(closest_actual_blob['r2'], blob['max_r2_found']) #100 - accuracy(closest_actual_blob_area, blob_area)
+			area_accuracy = 100 - (accuracy(closest_actual_blob['r2'], blob['max_r2_found']) * 100) #100 - accuracy(closest_actual_blob_area, blob_area)
 			closest_actual_blob_info = "ClosestActualBlob: P(%d,%d),A=%.2f,  X_accuracy=%.4f%%, A_accuracy=%.4f%%" % (closest_actual_blob['position'][0],closest_actual_blob['position'][1], \
 									closest_actual_blob_area, position_accuracy, area_accuracy)
 
@@ -245,11 +245,12 @@ def print_data():
 		# actually print info
 		print "\tActualBlob P(%d, %d) r2=%.2f, A=%.2f. %s" \
 			% (actual_blob['position'][0], actual_blob['position'][1], actual_blob['r2'], blob_area, closest_blob_info )		
-	print "\tMax Accuracy: X=%.4f, A=%.4f. Avg Accuracy: X=%.4f,  A=%.4f" \
-		% (position_accuracy_max, area_accuracy_max, position_accuracy_sum / len(actual_blobs), area_accuracy_sum / len(actual_blobs))
-	print "\t%.4f\t%.4f\t%.4f\t%.4f" \
-		% (position_accuracy_max, area_accuracy_max, position_accuracy_sum / len(actual_blobs), area_accuracy_sum / len(actual_blobs))
-	
+	if (len(actual_blobs) > 0):
+		print "\tMax Accuracy: X=%.4f, A=%.4f. Avg Accuracy: X=%.4f,  A=%.4f" \
+			% (position_accuracy_max, area_accuracy_max, position_accuracy_sum / len(actual_blobs), area_accuracy_sum / len(actual_blobs))
+		print "\t%.4f\t%.4f\t%.4f\t%.4f" \
+			% (position_accuracy_max, area_accuracy_max, position_accuracy_sum / len(actual_blobs), area_accuracy_sum / len(actual_blobs))
+		
 # Check for position bounds and adjust velocity
 def update_x_with_v(_x, _y, _vx, _vy, particle):
 	if (_x + _vx < 0):   # check min bounds x
@@ -284,7 +285,7 @@ global_frame_number = 0
 def update(frame_number):
 	global global_frame_number
 	global_frame_number = frame_number
-	#print "Frame %d" % frame_number
+	print "Frame %d" % frame_number
 	global next_blob_num
 
 	for p_idx,particle in enumerate(swarm):
@@ -514,6 +515,12 @@ def update(frame_number):
 	scatter_plot.set_offsets(swarm['position'])
 	
 	global run_anim
+
+	# Save screenshot if at certain frame
+	#if (frame_number in [0,150,300,450,600]):
+	#	plt.savefig("../screenshots/screenshot_i%d.png" % frame_number)
+
+	# Stop animation at frame number
 	if (frame_number == max_num_frames):
 		run_anim = False
 		print_data()
